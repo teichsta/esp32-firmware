@@ -10,6 +10,8 @@ $body-color: black;
 $gray-700: black;
 $gray-900: black;
 
+{{{module_pre_imports}}}
+
 @import "../node_modules/bootstrap/scss/functions";
 @import "../node_modules/bootstrap/scss/variables";
 
@@ -27,8 +29,6 @@ $container-max-widths: (
         lg: 960px,
         xl: 1230px
 );
-
-{{{module_pre_imports}}}
 
 @import "../node_modules/bootstrap/scss/mixins";
 @import "../node_modules/bootstrap/scss/root";
