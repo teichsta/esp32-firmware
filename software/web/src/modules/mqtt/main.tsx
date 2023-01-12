@@ -29,6 +29,7 @@ import { ConfigComponent } from "../../ts/components/config_component";
 import { ConfigForm } from "../../ts/components/config_form";
 import { FormRow } from "../../ts/components/form_row";
 import { InputText } from "../../ts/components/input_text";
+import { InputSelect } from "src/ts/components/input_select";
 import { InputNumber } from "../../ts/components/input_number";
 import { InputPassword } from "../../ts/components/input_password";
 import { Switch } from "../../ts/components/switch";
@@ -37,6 +38,7 @@ type MqttConfig = API.getType['mqtt/config'];
 
 interface MqttState {
     auto_discovery_config: API.getType['mqtt/auto_discovery_config'];
+    meter_config: API.getType['mqtt/meter_config'];
 }
 
 export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
@@ -48,11 +50,17 @@ export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
         util.eventTarget.addEventListener('mqtt/auto_discovery_config', () => {
             this.setState({auto_discovery_config: API.get('mqtt/auto_discovery_config')});
         });
+
+        util.eventTarget.addEventListener('mqtt/meter_config', () => {
+            this.setState({meter_config: API.get('mqtt/meter_config')});
+        });
     }
 
     override async sendSave(t: "mqtt/config", cfg: API.getType["mqtt/config"]) {
         if (API.hasModule('mqtt_auto_discovery'))
             await API.save('mqtt/auto_discovery_config', this.state.auto_discovery_config, __("mqtt.script.save_failed"));
+        if (API.hasModule('mqtt_meter'))
+            await API.save('mqtt/meter_config', this.state.meter_config, __("mqtt.script.save_failed"));
         await super.sendSave(t, cfg);
     }
 
@@ -124,13 +132,18 @@ export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
                     </FormRow>
 
                     {API.hasModule('mqtt_auto_discovery') ? <>
-                        <FormRow label={__("mqtt.content.enable_auto_discovery")}>
-                            <Switch desc={__("mqtt.content.enable_auto_discovery_desc")}
-                                    checked={state.auto_discovery_config.enable_auto_discovery}
-                                    onClick={() => this.setState({auto_discovery_config: {...this.state.auto_discovery_config, enable_auto_discovery: !state.auto_discovery_config.enable_auto_discovery}})}/>
+                        <FormRow label={__("mqtt.content.auto_discovery_mode")} label_muted={__("mqtt.content.auto_discovery_mode_muted")}>
+                            <InputSelect
+                                items={[
+                                    ["-1", __("mqtt.content.auto_discovery_mode_disabled")],
+                                    ["0", __("mqtt.content.auto_discovery_mode_generic")],
+                                    ["1", __("mqtt.content.auto_discovery_mode_homeassistant")],
+                                ]}
+                                value={state.auto_discovery_config.auto_discovery_mode}
+                                onValue={(v) => {this.setState({auto_discovery_config: {...this.state.auto_discovery_config, auto_discovery_mode: parseInt(v)}})}}/>
                         </FormRow>
 
-                        <FormRow label={__("mqtt.content.auto_discovery_prefix")} label_muted={__("mqtt.content.auto_discovery_prefix_muted")}>
+                        <FormRow label={__("mqtt.content.auto_discovery_prefix")}>
                             <InputText required
                                     maxLength={64}
                                     pattern="^[^#+$][^#+]*"
@@ -139,6 +152,24 @@ export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
                                     invalidFeedback={__("mqtt.content.auto_discovery_prefix_invalid")}
                                     />
                         </FormRow></> : null}
+
+                    {API.hasModule('mqtt_meter') ? <>
+                        <FormRow label={__("mqtt.content.enable_meter")}>
+                            <Switch desc={__("mqtt.content.enable_meter_desc")}
+                                checked={state.meter_config.enable}
+                                onClick={() => this.setState({meter_config: {...this.state.meter_config, enable: !state.meter_config.enable}})} />
+                        </FormRow>
+
+                        <FormRow label={__("mqtt.content.meter_topic")}>
+                            <InputText required
+                                    maxLength={128}
+                                    pattern="^[^#+$][^#+]*"
+                                    value={state.meter_config.topic}
+                                    onValue={(v) => this.setState({meter_config: {...this.state.meter_config, topic: v}})}
+                                    invalidFeedback={__("mqtt.content.meter_topic_invalid")}
+                                    />
+                        </FormRow>
+                    </>: null}
                 </ConfigForm>
             </>
         );

@@ -26,8 +26,6 @@
 #include <ESPmDNS.h>
 #include "NetBIOS.h"
 
-extern API api;
-extern TaskScheduler task_scheduler;
 extern char local_uid_str[32];
 
 void Network::pre_setup()
@@ -56,13 +54,13 @@ void Network::register_urls()
     if (!config.get("enable_mdns")->asBool())
         return;
 
-    if (!MDNS.begin(config.get("hostname")->asCStr())) {
+    if (!MDNS.begin(config.get("hostname")->asEphemeralCStr())) {
         logger.printfln("Error setting up mDNS responder!");
     } else {
         logger.printfln("mDNS responder started");
     }
     MDNS.addService("http", "tcp", 80);
-    NBNS.begin(config.get("hostname")->asCStr());
+    NBNS.begin(config.get("hostname")->asEphemeralCStr());
 }
 
 void Network::loop()

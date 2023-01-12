@@ -28,11 +28,7 @@
 #include "build.h"
 #include "modules.h"
 
-extern EventLog logger;
-
-extern TaskScheduler task_scheduler;
 extern char local_uid_str[32];
-extern API api;
 
 #if MODULE_ESP32_ETHERNET_BRICK_AVAILABLE()
 #define MQTT_RECV_BUFFER_SIZE 4096
@@ -56,8 +52,8 @@ void Mqtt::pre_setup()
         {"interval", Config::Uint32(1)}
     }), [](Config &cfg) -> String {
 #if MODULE_MQTT_AUTO_DISCOVERY_AVAILABLE()
-        const String global_topic_prefix = cfg.get("global_topic_prefix")->asString();
-        const String auto_discovery_prefix = mqtt_auto_discovery.config.get("auto_discovery_prefix")->asString();
+        const String &global_topic_prefix = cfg.get("global_topic_prefix")->asString();
+        const String &auto_discovery_prefix = mqtt_auto_discovery.config.get("auto_discovery_prefix")->asString();
 
         if (global_topic_prefix == auto_discovery_prefix)
             return "Global topic prefix cannot be the same as the MQTT auto discovery topic prefix.";
@@ -71,14 +67,14 @@ void Mqtt::pre_setup()
     });
 }
 
-void Mqtt::subscribe_with_prefix(String path, std::function<void(char *, size_t)> callback, bool forbid_retained)
+void Mqtt::subscribe_with_prefix(const String &path, std::function<void(char *, size_t)> callback, bool forbid_retained)
 {
-    String prefix = mqtt_config_in_use.get("global_topic_prefix")->asString();
+    const String &prefix = mqtt_config_in_use.get("global_topic_prefix")->asString();
     String topic = prefix + "/" + path;
     subscribe(topic, callback, forbid_retained);
 }
 
-void Mqtt::subscribe(String topic, std::function<void(char *, size_t)> callback, bool forbid_retained)
+void Mqtt::subscribe(const String &topic, std::function<void(char *, size_t)> callback, bool forbid_retained)
 {
     this->commands.push_back({topic, callback, forbid_retained});
 
@@ -100,7 +96,7 @@ void Mqtt::addCommand(size_t commandIdx, const CommandRegistration &reg)
         return;
 
     subscribe_with_prefix(reg.path, [reg, commandIdx](char *payload, size_t payload_len){
-        String reason = api.getCommandBlockedReason(commandIdx);
+        const String &reason = api.getCommandBlockedReason(commandIdx);
         if (reason != "") {
             logger.printfln("MQTT: Command %s is blocked: %s", reg.path.c_str(), reason.c_str());
             return;
@@ -136,19 +132,19 @@ void Mqtt::addRawCommand(size_t rawCommandIdx, const RawCommandRegistration &reg
     }, reg.is_action);
 }
 
-void Mqtt::publish_with_prefix(String path, String payload)
+void Mqtt::publish_with_prefix(const String &path, const String &payload)
 {
-    String prefix = mqtt_config_in_use.get("global_topic_prefix")->asString();
+    const String &prefix = mqtt_config_in_use.get("global_topic_prefix")->asString();
     String topic = prefix + "/" + path;
     publish(topic, payload, true);
 }
 
-void Mqtt::publish(String topic, String payload, bool retain)
+void Mqtt::publish(const String &topic, const String &payload, bool retain)
 {
     esp_mqtt_client_publish(this->client, topic.c_str(), payload.c_str(), payload.length(), 0, retain);
 }
 
-bool Mqtt::pushStateUpdate(size_t stateIdx, String payload, String path)
+bool Mqtt::pushStateUpdate(size_t stateIdx, const String &payload, const String &path)
 {
     auto &state = this->states[stateIdx];
 
@@ -160,7 +156,7 @@ bool Mqtt::pushStateUpdate(size_t stateIdx, String payload, String path)
     return true;
 }
 
-void Mqtt::pushRawStateUpdate(String payload, String path)
+void Mqtt::pushRawStateUpdate(const String &payload, const String &path)
 {
     this->publish_with_prefix(path, payload);
 }
@@ -191,6 +187,9 @@ void Mqtt::onMqttConnect()
         publish_with_prefix(reg.path, reg.config->to_string_except(reg.keys_to_censor));
     }
 
+#if MODULE_MQTT_METER_AVAILABLE()
+    mqtt_meter.onMqttConnect();
+#endif
 #if MODULE_MQTT_AUTO_DISCOVERY_AVAILABLE()
     mqtt_auto_discovery.onMqttConnect();
 #endif
@@ -204,6 +203,10 @@ void Mqtt::onMqttDisconnect()
 
 void Mqtt::onMqttMessage(char *topic, size_t topic_len, char *data, size_t data_len, bool retain)
 {
+#if MODULE_MQTT_METER_AVAILABLE()
+    if (mqtt_meter.onMqttMessage(topic, topic_len, data, data_len, retain))
+        return;
+#endif
 #if MODULE_MQTT_AUTO_DISCOVERY_AVAILABLE()
     if (mqtt_auto_discovery.onMqttMessage(topic, topic_len, data, data_len, retain))
         return;
@@ -351,11 +354,11 @@ void Mqtt::setup()
 
     esp_mqtt_client_config_t mqtt_cfg = {};
 
-    mqtt_cfg.host = mqtt_config_in_use.get("broker_host")->asCStr();
+    mqtt_cfg.host = mqtt_config_in_use.get("broker_host")->asEphemeralCStr();
     mqtt_cfg.port = mqtt_config_in_use.get("broker_port")->asUint();
-    mqtt_cfg.client_id = mqtt_config_in_use.get("client_name")->asCStr();
-    mqtt_cfg.username = mqtt_config_in_use.get("broker_username")->asCStr();
-    mqtt_cfg.password = mqtt_config_in_use.get("broker_password")->asCStr();
+    mqtt_cfg.client_id = mqtt_config_in_use.get("client_name")->asEphemeralCStr();
+    mqtt_cfg.username = mqtt_config_in_use.get("broker_username")->asEphemeralCStr();
+    mqtt_cfg.password = mqtt_config_in_use.get("broker_password")->asEphemeralCStr();
     mqtt_cfg.buffer_size = MQTT_RECV_BUFFER_SIZE;
     mqtt_cfg.network_timeout_ms = 100;
 

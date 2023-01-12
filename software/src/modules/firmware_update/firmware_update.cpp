@@ -30,6 +30,7 @@
 #include "tools.h"
 #include "build.h"
 #include "modules.h"
+#include "web_server.h"
 
 #include "./crc32.h"
 #include "./recovery_html.embedded.h"
@@ -39,12 +40,6 @@
 
 extern const char *DISPLAY_NAME;
 
-extern API api;
-extern EventLog logger;
-
-extern WebServer server;
-extern TaskScheduler task_scheduler;
-
 extern bool firmware_update_allowed;
 extern bool factory_reset_requested;
 extern int8_t green_led_pin;
@@ -53,7 +48,7 @@ extern int8_t green_led_pin;
 #define FIRMWARE_INFO_OFFSET (0xd000 - 0x1000)
 #define FIRMWARE_INFO_LENGTH 0x1000
 
-TaskHandle_t xTaskBuffer;
+static TaskHandle_t xTaskBuffer;
 
 void blinky(void *arg)
 {

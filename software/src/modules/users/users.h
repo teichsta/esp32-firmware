@@ -21,6 +21,10 @@
 
 #include "config.h"
 
+#define IND_ACK 1001
+#define IND_NACK 1002
+#define IND_NAG 1003
+
 class Users
 {
 public:
@@ -31,7 +35,7 @@ public:
     void loop();
 
     uint8_t next_user_id();
-    void rename_user(uint8_t user_id, const char *username, const char *display_name);
+    void rename_user(uint8_t user_id, const String &username, const String &display_name);
     void remove_from_username_file(uint8_t user_id);
     void search_next_free_user();
 
@@ -52,4 +56,11 @@ public:
 
     bool start_charging(uint8_t user_id, uint16_t current_limit, uint8_t auth_type, Config::ConfVariant auth_info);
     bool stop_charging(uint8_t user_id, bool force);
+    int16_t get_blink_state();
+    void set_blink_state(int16_t state);
+
+private:
+    int16_t blink_state = -1;
 };
+
+void set_led(int16_t mode);

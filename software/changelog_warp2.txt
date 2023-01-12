@@ -246,6 +246,44 @@
 - Fix deserialization errors not being returned via HTTP
 - Fix evse/(start/stop)_charging behaviour if not connected
 
-2022-11-25: 2.0.92 (<unknown>)
+2022-11-25: 2.0.92 (a5bdcf66)
 - OCPP Beta 3
 - (Re-enable OCPP and Modbus TCP)
+
+2022-11-28: 2.0.10 (7b54347e)
+- (Disable OCPP and Modbus TCP for non-beta firmware)
+- Fix hidden_proxy used in provisioning
+
+2022-12-16: 2.0.11 (023a279e)
+- Add Modbus TCP
+- Fix repeated WiFi scans taking a long time
+- Fix optional DNS servers in static IP configuration
+- Improve API payload parsing performance
+- Improve API error messages
+- Fix WiFi RSSI alt text
+- Add watchdog protecting against WebSocket and EVSE communication failure
+- Fix NTP servers with short names/IPs
+- Don't require second NTP server to be set
+- Fix charge management mDNS log spam if mDNS is disabled
+- Fix config migrations from pre-2.0.0 firmwares
+- Fix config reset
+- Use freshly build bootloader in merged firmware
+- Update timezone database
+- Fix deletion of unsaved users
+
+2022-12-22: 2.0.93 (3bff8d7f)
+- OCPP Beta 4
+- (Re-enable OCPP)
+- Improve API error messages
+- Show multiple API errors in one response
+- Fix user configuration validation
+- Add NFC tag if exactly one tag was seen
+- Fix login page being shown if login check times out
+- Fix user API being blocked until reboot on error
+- Fix charge manager current configuration interdependencies
+- Improve WiFi connection establishment speed
+- Add support for OCPP basic authentication
+- Add boost mode (through EVSE 2.0 Bricklet firmware 2.1.9)
+- Add EV wakeup (through EVSE 2.0 Bricklet firmware 2.1.9)
+- Fix CP disconnect API (through EVSE 2.0 Bricklet firmware 2.1.9)
+- Silence confusing web socket error message

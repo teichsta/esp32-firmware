@@ -1,36 +1,29 @@
 #include "ocpp/Platform.h"
 
 #include "ocpp/ChargePoint.h"
+#include "ocpp/Configuration.h"
 #include "time.h"
 
 #define URL_PARSER_IMPLEMENTATION_STATIC
 #include "lib/url.h"
 
 #include "esp_websocket_client.h"
-
-
 #include "esp_crt_bundle.h"
+#include "mbedtls/base64.h"
+#include "esp_transport_ws.h"
 
 #include "modules.h"
 #include "api.h"
 #include "build.h"
-extern API api;
+
+static bool feature_evse = false;
+static bool feature_meter = false;
+static bool feature_meter_all_values = false;
+static bool feature_meter_phases = false;
+#define REQUIRE_FEATURE(x, default_val) do { if (!feature_##x && !api.hasFeature(#x)) { return default_val; } feature_##x = true;} while(0)
 
 void(*recv_cb)(char *, size_t, void *) = nullptr;
 void *recv_cb_userdata = nullptr;
-bool connected = false;
-
-enum ws_transport_opcodes {
-    WS_TRANSPORT_OPCODES_CONT =  0x00,
-    WS_TRANSPORT_OPCODES_TEXT =  0x01,
-    WS_TRANSPORT_OPCODES_BINARY = 0x02,
-    WS_TRANSPORT_OPCODES_CLOSE = 0x08,
-    WS_TRANSPORT_OPCODES_PING = 0x09,
-    WS_TRANSPORT_OPCODES_PONG = 0x0a,
-    WS_TRANSPORT_OPCODES_FIN = 0x80,
-    WS_TRANSPORT_OPCODES_NONE = 0x100,   /*!< not a valid opcode to indicate no message previously received
-                                          * from the API esp_transport_ws_get_read_opcode() */
-} ws_transport_opcodes_t;
 
 static void websocket_event_handler(void *handler_args, esp_event_base_t base, int32_t event_id, void *event_data)
 {
@@ -38,11 +31,9 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
     switch (event_id) {
     case WEBSOCKET_EVENT_CONNECTED:
         logger.printfln("OCPP WEBSOCKET CONNECTED");
-        connected = true;
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
         logger.printfln("OCPP WEBSOCKET DISCONNECTED");
-        connected = false;
         break;
     case WEBSOCKET_EVENT_DATA:
         if (data->payload_len == 0)
@@ -67,16 +58,45 @@ static void websocket_event_handler(void *handler_args, esp_event_base_t base, i
 }
 
 esp_websocket_client_handle_t client;
-void* platform_init(const char *websocket_url)
+void* platform_init(const char *websocket_url, const char *basic_auth_user, const char *basic_auth_pass)
 {
     esp_websocket_client_config_t websocket_cfg = {};
     websocket_cfg.uri = websocket_url;
     websocket_cfg.subprotocol = "ocpp1.6";
     websocket_cfg.crt_bundle_attach = esp_crt_bundle_attach;
     websocket_cfg.disable_auto_reconnect = false;
-    websocket_cfg.ping_interval_sec = 10;
-    websocket_cfg.pingpong_timeout_sec = 25;
-    websocket_cfg.disable_pingpong_discon = false;
+
+    uint32_t ping_interval = getIntConfigUnsigned(ConfigKey::WebSocketPingInterval);
+    if (ping_interval != 0) {
+        websocket_cfg.ping_interval_sec = ping_interval;
+        websocket_cfg.pingpong_timeout_sec = ping_interval * 3 + (ping_interval / 2);
+        websocket_cfg.disable_pingpong_discon = false;
+    } else {
+        // We can't completely disable sending pings.
+        websocket_cfg.ping_interval_sec = 0xFFFFFFFF;
+        websocket_cfg.pingpong_timeout_sec = 0;
+        websocket_cfg.disable_pingpong_discon = true;
+    }
+
+    // Username and password are "Not supported for now".
+    //websocket_cfg.username = basic_auth_user;
+    //websocket_cfg.password = basic_auth_pass;
+    // Instead create and pass the authorization header directly.
+
+    String base64input = String(basic_auth_user) + ':' + basic_auth_pass;
+
+    size_t written = 0;
+    mbedtls_base64_encode(nullptr, 0, &written, (const unsigned char *)base64input.c_str(), base64input.length());
+
+    std::unique_ptr<char[]> buf{new char[written + 1]()}; // +1 for '\0'
+    mbedtls_base64_encode((unsigned char *) buf.get(), written + 1, &written, (const unsigned char *)base64input.c_str(), base64input.length());
+    buf[written] = '\0';
+
+    String header = "Authorization: Basic ";
+    header += buf.get();
+    header += "\r\n";
+
+    websocket_cfg.headers = header.c_str();
 
     client = esp_websocket_client_init(&websocket_cfg);
     esp_websocket_register_events(client, WEBSOCKET_EVENT_ANY, websocket_event_handler, (void *)client);
@@ -84,6 +104,10 @@ void* platform_init(const char *websocket_url)
     esp_websocket_client_start(client);
 
     return client;
+}
+
+bool platform_has_fixed_cable(int connectorId) {
+    return true;
 }
 
 void platform_disconnect(void *ctx) {
@@ -96,14 +120,18 @@ void platform_destroy(void *ctx) {
 
 bool platform_ws_connected(void *ctx)
 {
-    return connected;
+    return esp_websocket_client_is_connected(client);
 }
 
 void platform_ws_send(void *ctx, const char *buf, size_t buf_len)
 {
-    if (esp_websocket_client_send_text(client, buf, buf_len, pdMS_TO_TICKS(1000)) != ESP_OK)
-        if (!esp_websocket_client_is_connected(client))
-            esp_websocket_client_start(client);
+    esp_websocket_client_send_text(client, buf, buf_len, pdMS_TO_TICKS(1000));
+}
+
+void platform_ws_send_ping(void *ctx) {
+    // NOP. esp_websocket automatically sends pings, pongs and checks for timeouts.
+    // We can't send pings manually until we switch to ESP-IDF 5.0:
+    // https://github.com/espressif/esp-protocols/commit/3330b96b10fc05287c2d3f52057e4ba453576b9a
 }
 
 void platform_ws_register_receive_callback(void *ctx, void(*cb)(char *, size_t, void *), void *user_data)
@@ -168,6 +196,8 @@ void platform_cable_timed_out(int32_t connectorId)
 }
 
 EVSEState platform_get_evse_state(int32_t connectorId) {
+    REQUIRE_FEATURE(evse, EVSEState::Faulted);
+
     auto state = api.getState("evse/state")->get("charger_state")->asUint();
     switch(state) {
         case CHARGER_STATE_NOT_PLUGGED_IN:
@@ -192,6 +222,8 @@ EVSEState platform_get_evse_state(int32_t connectorId) {
 
 // This is the Energy.Active.Import.Register measurand in Wh
 int32_t platform_get_energy(int32_t connectorId) {
+    REQUIRE_FEATURE(meter, 0);
+
     Config *meter_values = api.getState("meter/values", false);
     if (meter_values == nullptr)
         return 0;
@@ -323,9 +355,9 @@ float platform_get_raw_meter_value(int32_t connectorId, SampledValueMeasurand me
     if (connectorId != 1)
         return 0.0f;
 
+    REQUIRE_FEATURE(meter_all_values, 0);
+
     Config *meter_all_values = api.getState("meter/all_values");
-    if (meter_all_values == nullptr)
-        return 0.0f;
 
     switch(measurand) {
         case SampledValueMeasurand::ENERGY_ACTIVE_EXPORT_REGISTER:
@@ -359,6 +391,8 @@ float platform_get_raw_meter_value(int32_t connectorId, SampledValueMeasurand me
             return fabs(meter_all_values->get(15 + (size_t) phase)->asFloat());
 
         case SampledValueMeasurand::CURRENT_OFFERED:
+            REQUIRE_FEATURE(meter_phases, 0);
+            REQUIRE_FEATURE(evse, 0);
             return api.getState("meter/phases")->get("phases_connected")->get((size_t) phase)->asBool() ?
                    ((float)api.getState("evse/state")->get("allowed_charging_current")->asUint()) / 1000.0f :
                    0.0f;
@@ -468,8 +502,35 @@ void platform_remove_file(const char *name) {
     LittleFS.remove(PATH_PREFIX + name);
 }
 
-void platform_reset() {
-    logger.printfln("Ignoring reset request for now.");
+void platform_reset(bool hard) {
+    if (hard) {
+        /*
+        At receipt of a hard reset the Charge Point SHALL restart (all) the hardware, it is not required to gracefully stop
+        ongoing transaction.
+        */
+#if MODULE_EVSE_AVAILABLE()
+        evse.reset();
+#endif
+#if MODULE_EVSE_V2_AVAILABLE()
+        evse_v2.reset();
+#endif
+#if MODULE_MODBUS_METER_AVAILABLE()
+        modbus_meter.reset();
+#endif
+#if MODULE_NFC_AVAILABLE()
+        nfc.reset();
+#endif
+#if MODULE_RTC_AVAILABLE()
+        rtc.reset();
+#endif
+    }
+
+    /*
+        At receipt of a soft reset, the Charge Point SHALL [...]
+        It should then restart the application software (if possible,
+        otherwise restart the processor/controller).
+    */
+    ESP.restart();
 }
 
 void platform_register_stop_callback(void *ctx, void (*cb)(int32_t, StopReason, void *), void *user_data) {
@@ -480,14 +541,14 @@ const char *platform_get_charge_point_vendor() {
     return "Tinkerforge GmbH";
 }
 
-char model[20] = {0};
+char model[20] = {0}; // FIXME: Check if this needs to be one byte longer. See https://github.com/Tinkerforge/tfocpp/blob/5f07d2a7821167bf09eb4422d80657bb77ef886e/src/ocpp/Messages.cpp#L377
 const char *platform_get_charge_point_model() {
-    strncpy(model, device_name.name.get("display_type")->asCStr(), ARRAY_SIZE(model));
+    device_name.name.get("display_type")->asString().toCharArray(model, ARRAY_SIZE(model));
     return model;
 }
 
 const char *platform_get_charge_point_serial_number() {
-    return device_name.name.get("name")->asCStr();
+    return device_name.name.get("name")->asUnsafeCStr(); // FIXME: Check if this use of the returned C string is safe or if a local copy like in platform_get_charge_point_model() is required. Might need to be truncated to a length of 25+\0.
 }
 const char *platform_get_firmware_version() {
     return build_version_full_str();
