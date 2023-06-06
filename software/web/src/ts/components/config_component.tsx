@@ -51,14 +51,16 @@ export abstract class ConfigComponent<Config extends keyof ConfigMap, P = {}, S 
         this.error_string = error_string;
         this.reboot_string = reboot_string;
 
-        util.eventTarget.addEventListener(t, () => {
+        util.addApiEventListener(t, () => {
             if (!this.ignore_updates)
                 this.setState(API.get(t) as Partial<API.getType[Config] & S>);
         });
 
-        util.eventTarget.addEventListener((t + "_modified") as Config, () => {
-            if (!this.ignore_updates)
-                this.setState(API.get(t) as Partial<API.getType[Config] & S>);
+        util.addApiEventListener((t + "_modified") as Config, () => {
+            // Make sure that clicking the reset button
+            // (which changes _modified because it removes the config saved in the ESPs flash)
+            // re-renders the component to disable the reset button.
+            this.forceUpdate();
         })
     }
 
@@ -113,12 +115,13 @@ export abstract class ConfigComponent<Config extends keyof ConfigMap, P = {}, S 
         await API.save(t, cfg, this.error_string, this.reboot_string);
     }
 
+    // Also override this if you override sendSave
+    getIsModified(t: Config): boolean {
+        return API.is_modified(t);
+    }
+
     // Override this to implement custom reset logic
     async sendReset(t: Config) {
         await API.reset(t, this.error_string, this.reboot_string);
-    }
-
-    getIsModified(t: Config): boolean {
-        return API.is_modified(t);
     }
 }

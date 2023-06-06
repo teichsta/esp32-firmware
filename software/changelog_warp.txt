@@ -319,3 +319,75 @@
 - Update timezone database
 - Fix deletion of unsaved users
 - Don't show meter phases and all values if not available
+
+2023-02-28: 2.1.0 (17f4001d)
+- Don't show shutdown and GP input current slots
+- Add PDF export for charge logs
+- Add CSV export flavors
+- Add boost mode (through EVSE Bricklet firmware 2.1.6)
+- Make sure contactor is not turned off under load (through EVSE Bricklet firmware 2.1.6)
+- Reorganize web interface menu structure
+- Split EVSE subpage into status and settings subpages
+- Move auto start charging into EVSE settings
+- Replace charge management protocol with new forwards-compatible version
+- Replace meter graph implementation
+- Improve translations
+- Add API to retrieve core dump
+- Add watchdog protecting against firmware lock-ups
+- Improve WiFi connection establishment speed
+- Fix WiFi not allowing configuration to be saved if only the selected network has changed
+- Fix float configuration values being dropped if configuration is saved by pressing enter in float input
+- Fix charge manager, nfc and users modal form submission
+- Add check for reserved, broadcast and multicast IP addresses in charge manager configuration
+- Fix charge manager error duration not increasing if all chargers don't send packets anymore
+- Fix start/end date selection of charge tracker log export not considering the user's timezone
+- Fix status page label widths
+- Change default NTP server for improved reliability
+- Fix RTC time handling
+- Fix charged energy register in Modbus/TCP Keba emulation mode
+
+2023-03-16: 2.1.1 (854dbe3c)
+- Add MQTT auto discovery for Home Assistant and compatible systems
+- Add time and energy limits for charging
+- Add core dump to debug report
+- Scale meter graphs to always span at least 100 W
+- Fix first four minutes of meter live graph
+- Fix charged sum calculation being wrong if charges without start date were tracked before the selected interval
+- Fix charge tracking values if power-cycled
+- Fix error feedback of text inputs
+- Fix WiFi station passphase placeholder text
+- Fix deletion of WiFI station passphrase
+- Fix negative and large energy plot values
+- Fix length check of text and password inputs
+- Make Bricklet flashing more robust
+- Improve translations
+- Make managed chargers on status page clickable links
+- Check if configured charger hosts have duplicates
+- Filter out mDNS responses not created by WARP Chargers
+- Resolve .local hostnames via mDNS scan
+- Remove stale RSSI and IP values if WiFi connection is lost
+- Fix charge log stopping after 60 seconds
+- Improve MQTT error messages
+
+2023-04-14: 2.1.2 (388902cd)
+- Add unique object_id to MQTT auto discovery entries
+- Add EVSE coils to Modbus TCP
+- Add fill to meter plot
+- Make web interface listen port configurable
+- Improve WiFi reception by disabling HT40 mode and 11b
+- Make energy meter initialization more robust
+- Fix charge manager distribution log access if verbose not requested
+- Make static IP configuration of ethernet interface more reliable
+- Fix removal of controlled charger in charge manager sub-page
+- Improve translations
+- Fix charge limit blocking a charge forever
+- Update timezone database
+- Log connection duration when ethernet, WiFi, MQTT or WireGuard connection is lost
+- Fix OCPP not reconnecting if a TLS connection was closed by the server immediately after establishing it
+- Reset energy meter only once if requested via Modbus TCP
+- Make sure action requests are never ignored if requested via Modbus TCP
+- Fix broken status page links if charge manager config is changed but not applied
+- Relax PDF download timeout
+- Relax MQTT message timeout
+- Allow clicking stop on status page if charger is blocked on another slot
+- Show error if electricity price is obviously wrong

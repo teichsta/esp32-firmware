@@ -43,6 +43,17 @@ type WifiSTAState = {
 
 type WifiInfo = Exclude<API.getType['wifi/scan_results'], string>[0];
 
+export function wifi_symbol(rssi: number) {
+    if(rssi >= -60)
+        return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi"><title>RSSI: {rssi}</title><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
+    if(rssi >= -70)
+        return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi"><title>RSSI: {rssi}</title><path stroke="#cccccc" d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
+    if(rssi >= -80)
+        return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi"><title>RSSI: {rssi}</title><path stroke="#cccccc" d="M1.42 9a16 16 0 0 1 21.16 0"></path><path stroke="#cccccc" d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
+
+    return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi"><title>RSSI: {rssi}</title><path stroke="#cccccc" d="M1.42 9a16 16 0 0 1 21.16 0"></path><path stroke="#cccccc" d="M5 12.55a11 11 0 0 1 14.08 0"></path><path stroke="#cccccc" d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
+}
+
 export class WifiSTA extends ConfigComponent<'wifi/sta_config', {}, WifiSTAState> {
     ipconfig_valid: boolean = true;
     scan_timeout: number = null;
@@ -52,7 +63,7 @@ export class WifiSTA extends ConfigComponent<'wifi/sta_config', {}, WifiSTAState
               __("wifi.script.sta_config_failed"),
               __("wifi.script.sta_reboot_content_changed"));
 
-        util.eventTarget.addEventListener('wifi/scan_results', (e) => {
+        util.addApiEventListener('wifi/scan_results', (e) => {
             if (e.data == "scan in progress")
                 return;
 
@@ -68,6 +79,10 @@ export class WifiSTA extends ConfigComponent<'wifi/sta_config', {}, WifiSTAState
             if (typeof e.data !== "string")
                 this.setState({scan_running: false, scan_results: e.data});
         }, false);
+
+        this.state = {passphrase_placeholder: __("wifi.content.unchanged"),
+                      passphrase_required: false,
+                      scan_running: false} as any;
     }
 
     override async isSaveAllowed(cfg: STAConfig) {
@@ -112,15 +127,8 @@ export class WifiSTA extends ConfigComponent<'wifi/sta_config', {}, WifiSTAState
         }, 12000);
     }
 
-    wifi_symbol(rssi: number) {
-        if(rssi >= -60)
-            return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi"><title>RSSI: {rssi}</title><path d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
-        if(rssi >= -70)
-            return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi"><title>RSSI: {rssi}</title><path stroke="#cccccc" d="M1.42 9a16 16 0 0 1 21.16 0"></path><path d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
-        if(rssi >= -80)
-            return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi"><title>RSSI: {rssi}</title><path stroke="#cccccc" d="M1.42 9a16 16 0 0 1 21.16 0"></path><path stroke="#cccccc" d="M5 12.55a11 11 0 0 1 14.08 0"></path><path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
-
-        return <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-wifi"><title>RSSI: {rssi}</title><path stroke="#cccccc" d="M1.42 9a16 16 0 0 1 21.16 0"></path><path stroke="#cccccc" d="M5 12.55a11 11 0 0 1 14.08 0"></path><path stroke="#cccccc" d="M8.53 16.11a6 6 0 0 1 6.95 0"></path><line x1="12" y1="20" x2="12.01" y2="20"></line></svg>;
+    hackToAllowSave() {
+        document.getElementById("wifi_sta_config_form").dispatchEvent(new Event('input'));
     }
 
     get_scan_results(state: Readonly<STAConfig & WifiSTAState>) {
@@ -163,17 +171,19 @@ export class WifiSTA extends ConfigComponent<'wifi/sta_config', {}, WifiSTAState
             return <Dropdown.Item
                         as="button"
                         type="button"
-                        onClick={() =>
+                        onClick={() => {
                             this.setState({
                                 ssid: ap.ssid,
                                 bssid: this.string_to_bssid(ap.bssid),
                                 passphrase_required: passphrase_required,
-                                passphrase_placeholder: passphrase_required ? __("wifi.content.required") : __("wifi.content.unchanged"),
+                                passphrase_placeholder: passphrase_required ? __("component.input_password.required") : __("component.input_password.unchanged"),
                                 enable_sta: true,
                                 bssid_lock: enable_bssid_lock
-                            })}
+                            });
+                            this.hackToAllowSave();
+                        }}
                         key={ap.bssid}>
-                    {this.wifi_symbol(ap.rssi)}
+                    {wifi_symbol(ap.rssi)}
                     {ap.encryption == 0 ? <Unlock/> : <Lock/>}
                     <span class="pl-2">{display_name}</span>
                 </Dropdown.Item>
@@ -188,9 +198,8 @@ export class WifiSTA extends ConfigComponent<'wifi/sta_config', {}, WifiSTAState
     string_to_bssid = (s: string) => s.split(':').map(x => parseInt(x, 16));
 
     render(props: {}, state: Readonly<STAConfig & WifiSTAState>) {
-        if (!state)
-            return (<></>);
-
+        if (!util.render_allowed())
+            return <></>
 
         return (
             <>
@@ -208,18 +217,17 @@ export class WifiSTA extends ConfigComponent<'wifi/sta_config', {}, WifiSTAState
                     </FormRow>
 
                     <FormRow label={__("wifi.content.sta_ssid")}>
-                        <div class="input-group">
                             <InputText required={state.enable_sta}
                                     maxLength={32}
                                     value={state.ssid}
-                                    onValue={this.set("ssid")}/>
-                            <Dropdown className="input-group-append" onToggle={this.toggleDropdown}>
-                                <Dropdown.Toggle className="form-control rounded-right">{__("wifi.content.sta_scan")}</Dropdown.Toggle>
-                                <Dropdown.Menu align="right">
-                                    {this.get_scan_results(state)}
-                                </Dropdown.Menu>
-                            </Dropdown>
-                        </div>
+                                    onValue={this.set("ssid")}>
+                                <Dropdown className="input-group-append" onToggle={this.toggleDropdown}>
+                                    <Dropdown.Toggle className="form-control rounded-right">{__("wifi.content.sta_scan")}</Dropdown.Toggle>
+                                    <Dropdown.Menu align="right">
+                                        {this.get_scan_results(state)}
+                                    </Dropdown.Menu>
+                                </Dropdown>
+                            </InputText>
                     </FormRow>
 
                     <FormRow label={__("wifi.content.sta_bssid")}>
@@ -251,6 +259,19 @@ export class WifiSTA extends ConfigComponent<'wifi/sta_config', {}, WifiSTAState
                         onValue={(v) => this.setState(v)}
                         value={state}
                         setValid={(v) => this.ipconfig_valid = v}
+                        forbidNetwork={[
+                                {ip: util.parseIP("127.0.0.1"), subnet: util.parseIP("255.0.0.0"), name: "localhost"}
+                            ].concat(
+                                [{ip: util.parseIP(API.get("wifi/ap_config").ip),
+                                subnet: util.parseIP(API.get("wifi/ap_config").subnet),
+                                name: __("component.ip_configuration.wifi_ap")}]
+                            ).concat(
+                                !API.hasModule("wireguard") || API.get_maybe("wireguard/config").internal_ip == "0.0.0.0" ? [] :
+                                [{ip: util.parseIP(API.get_maybe("wireguard/config").internal_ip),
+                                subnet: util.parseIP(API.get_maybe("wireguard/config").internal_subnet),
+                                name: __("component.ip_configuration.wireguard")}]
+                            )
+                        }
                         />
 
                 </ConfigForm>

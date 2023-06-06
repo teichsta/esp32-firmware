@@ -20,11 +20,12 @@
 
 #include "api.h"
 #include "task_scheduler.h"
+#include "event_log.h"
 
 #include "modules.h"
 
 #include <time.h>
-#include <sntp.h>
+#include <esp_sntp.h>
 #include <lwip/inet.h>
 #include <esp_netif.h>
 
@@ -90,7 +91,7 @@ void NTP::pre_setup()
         {"use_dhcp", Config::Bool(true)},
         {"timezone", Config::Str("Europe/Berlin", 0, 32)}, // Longest is America/Argentina/ComodRivadavia = 32 chars
         {"server", Config::Str("ptbtime1.ptb.de", 0, 64)}, // We've applied for a vendor zone @ pool.ntp.org, however this seems to take quite a while. Use the ptb servers for now.
-        {"server2", Config::Str("ptbtime2.ptb.de", 0, 64)},
+        {"server2", Config::Str("ptbtime4.ptb.de", 0, 64)},
     }), [](Config &conf) -> String {
         if (lookup_timezone(conf.get("timezone")->asEphemeralCStr()) == nullptr)
             return "Can't update config: Failed to look up timezone.";
@@ -164,8 +165,4 @@ void NTP::register_urls()
         if (time.tv_sec - this->last_sync.tv_sec >= NTP_DESYNC_THRESHOLD_S || time.tv_sec < build_timestamp())
             ntp.state.get("synced")->updateBool(false);
     }, 0, 30 * 1000);
-}
-
-void NTP::loop()
-{
 }

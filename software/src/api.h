@@ -19,14 +19,18 @@
 
 #pragma once
 
+#include "config.h"
+
 #include <Arduino.h>
 
 #include <functional>
 #include <initializer_list>
 #include <vector>
 
-#include "config.h"
+#include "module.h"
 #include "web_server.h"
+#include "chunked_response.h"
+#include "tools.h"
 
 struct StateRegistration {
     String path;
@@ -42,7 +46,6 @@ struct CommandRegistration {
     std::function<void(void)> callback;
     std::vector<String> keys_to_censor_in_debug_report;
     bool is_action;
-    String blockedReason;
 };
 
 struct RawCommandRegistration {
@@ -51,12 +54,20 @@ struct RawCommandRegistration {
     bool is_action;
 };
 
-class IAPIBackend
+struct ResponseRegistration {
+    String path;
+    ConfigRoot *config;
+    std::function<void(IChunkedResponse *, Ownership *, uint32_t)> callback;
+    std::vector<String> keys_to_censor_in_debug_report;
+};
+
+class IAPIBackend : public IModule
 {
 public:
     virtual void addCommand(size_t commandIdx, const CommandRegistration &reg) = 0;
     virtual void addState(size_t stateIdx, const StateRegistration &reg) = 0;
     virtual void addRawCommand(size_t rawCommandIdx, const RawCommandRegistration &reg) = 0;
+    virtual void addResponse(size_t responseIdx, const ResponseRegistration &reg) = 0;
     virtual bool pushStateUpdate(size_t stateIdx, const String &payload, const String &path) = 0;
     virtual void pushRawStateUpdate(const String &payload, const String &path) = 0;
     virtual void wifiAvailable() = 0;
@@ -69,7 +80,6 @@ public:
 
     void pre_setup();
     void setup();
-    void loop();
 
     String callCommand(const String &path, const Config::ConfUpdate &payload);
 
@@ -80,8 +90,8 @@ public:
     void addState(const String &path, ConfigRoot *config, std::initializer_list<String> keys_to_censor, uint32_t interval_ms);
     bool addPersistentConfig(const String &path, ConfigRoot *config, std::initializer_list<String> keys_to_censor, uint32_t interval_ms);
     //void addTemporaryConfig(const String &path, Config *config, std::initializer_list<String> keys_to_censor, uint32_t interval_ms, std::function<void(void)> callback);
-
     void addRawCommand(const String &path, std::function<String(char *, size_t)> callback, bool is_action);
+    void addResponse(const String &path, ConfigRoot *config, std::initializer_list<String> keys_to_censor_in_debug_report, std::function<void(IChunkedResponse *, Ownership *, uint32_t)> callback);
 
     bool hasFeature(const char *name);
 
@@ -89,21 +99,18 @@ public:
     static void removeConfig(const String &path);
     static void removeAllConfig();
 
-    void blockCommand(const String &path, const String &reason);
-    void unblockCommand(const String &path);
-    const String &getCommandBlockedReason(size_t commandIdx) const;
-
     static bool restorePersistentConfig(const String &path, ConfigRoot *config);
 
     void registerDebugUrl(WebServer *server);
 
-    void registerBackend(IAPIBackend *backend);
+    size_t registerBackend(IAPIBackend *backend);
 
     void wifiAvailable();
 
     std::vector<StateRegistration> states;
     std::vector<CommandRegistration> commands;
     std::vector<RawCommandRegistration> raw_commands;
+    std::vector<ResponseRegistration> responses;
 
     std::vector<IAPIBackend *> backends;
 

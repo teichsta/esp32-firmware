@@ -10,13 +10,20 @@
             "gpio_names_2": "Motoreingangsschalter, Schützsteuerung, Konfigurierbarer Ausgang, CP-Trennung",
             "gpio_names_3": "Motor aktiv, Motor-Phase, Schützprüfung vorher, Schützprüfung nachher",
             "gpio_names_4": "Konfigurierbarer Eingang, DC X6, DC X30, LED",
-            "gpio_names_5": "Nicht belegt",
+            "gpio_names_5": "nicht belegt",
             "gpio_shutdown": "Abschalteingang",
             "gpio_shutdown_muted": "<a href=\"{{{manual_url}}}\">siehe Betriebsanleitung für Details</a>",
             "gpio_shutdown_not_configured": "Nicht konfiguriert",
             "gpio_shutdown_on_open": "Abschalten wenn geöffnet",
             "gpio_shutdown_on_close": "Abschalten wenn geschlossen",
             "not_configured": "Nicht konfiguriert",
+            "active_low_blocked": "Blockiert wenn geschlossen",
+            "active_low_prefix": "Limitiert Ladestrom auf ",
+            "active_low_suffix": " wenn geschlossen",
+            "active_high_blocked": "Blockiert wenn geöffnet",
+            "active_high_prefix": "Limitiert Ladestrom auf ",
+            "active_high_suffix": " wenn geöffnet",
+
             "todo": "Ideen bzw. Wünsche? Schreib eine Mail an info@tinkerforge.com",
             "gpio_in": "Konfigurierbarer Eingang",
             "gpio_in_muted": "kann als GPIO 16 gelesen werden",
@@ -25,7 +32,7 @@
             "gpio_out_high": "Hochohmig",
             "gpio_out_low": "Verbunden mit Masse",
             "button_configuration": "Tastereinstellung",
-            "button_configuration_muted": "Aktion, die bei Druck des Tasters ausgeführt wird",
+            "button_configuration_muted": "Aktion, die bei Druck des Tasters ausgeführt wird.",
             "button_configuration_deactivated": "Keine Aktion",
             "button_configuration_start_charging": "Ladestart",
             "button_configuration_stop_charging": "Ladestop",
@@ -37,13 +44,6 @@
             "control_pilot_disconnect_desc": "Control Pilot Disconnect",
             "control_pilot_disconnect_desc_muted": "",
             "control_pilot_disconnect": "Control Pilot Disconnect",
-
-            "control_pilot_cfg": "Control Pilot-Einstellung",
-            "control_pilot_cfg_muted": "Täuscht Abziehen und Anstecken des Ladekabels vor",
-            "control_pilot_disconnected": "Getrennt",
-            "control_pilot_connected": "Verbunden",
-            "control_pilot_automatic": "Automatisch",
-            "control_pilot_state": "Control Pilot-Zustand",
 
             "dc_fault_current_state": "DC-Fehlerstromzustand",
             "dc_fault_current_state_desc": "",
@@ -57,7 +57,8 @@
             "reset_dc_fault_title": "Zurücksetzen des DC-Fehlerstromschutzmoduls",
             "reset_dc_fault_content": "Durch das Zurücksetzen des Moduls kann wieder geladen werden. <b>Es muss sichergestellt sein, dass der Grund für das Auslösen des Moduls behoben wurde!</b> <a href=\"{{{manual_url}}}\">Siehe Betriebsanleitung für Details.</a> Soll das DC-Fehlerstromschutzmodul wirklich zurückgesetzt werden?",
             "abort": "Abbrechen",
-            "reset": "Zurücksetzen"
+            "reset": "Zurücksetzen",
+            "trigger_dc_fault_test": "DC-Fehlerschutz testen"
         },
         "script": {
             "control_pilot_configuration_failed": "Speichern der Control-Pilot-Konfiguration fehlgeschlagen",
@@ -68,8 +69,9 @@
             "meter_type_1": "SDM72",
             "meter_type_2": "SDM630",
             "meter_type_3": "SDM72V2",
+            "meter_type_254": "intern",
 
-            "slot_4": "Autostart oder Taster"
+            "slot_4": "Manuelle Ladefreigabe oder Taster"
         }
     }
 }

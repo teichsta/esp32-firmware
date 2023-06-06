@@ -103,3 +103,16 @@ export interface reset {
 export interface boost_mode {
     enabled: boolean
 }
+
+export interface identity {
+    uid: string,
+    connected_uid: string,
+    position: string,
+    hw_version: string,
+    fw_version: string,
+    device_identifier: number
+}
+
+export interface led_config {
+    enable_api: boolean
+}

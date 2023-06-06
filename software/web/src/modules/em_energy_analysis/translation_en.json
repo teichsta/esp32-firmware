@@ -7,9 +7,21 @@
             "em_energy_analysis": "Energy Analysis"
         },
         "content": {
-            "em_energy_analysis": "Energy Analysis"
+            "em_energy_analysis": "Energy Analysis",
+            "no_data": "No data available!",
+            "loading": "Loading data...",
+            "data_type": "Selection",
+            "data_type_5min": "1 day in 5 minutes",
+            "data_type_daily": "1 month in days"
         },
         "script": {
+            "time_5min": "Time of day",
+            "time_daily": "Date",
+            "power": "Power",
+            "energy": "Energy",
+            "grid_connection": "Grid connection",
+            "grid_in": "Grid draw",
+            "grid_out": "Grid feed"
         }
     }
 }

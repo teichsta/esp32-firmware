@@ -51,6 +51,9 @@ void WebServer::start()
 
     config.enable_so_linger = true;
     config.linger_timeout = 0;
+#if MODULE_NETWORK_AVAILABLE()
+    config.server_port = network.config.get("web_server_port")->asUint();
+#endif
 
 #if MODULE_HTTP_AVAILABLE()
     config.uri_match_fn = custom_uri_match;
@@ -117,7 +120,6 @@ WebServerHandler *WebServer::on(const char *uri, httpd_method_t method, wshCallb
 }
 
 static const size_t SCRATCH_BUFSIZE = 2048;
-static uint8_t scratch_buf[SCRATCH_BUFSIZE] = {0};
 
 static esp_err_t low_level_upload_handler(httpd_req_t *req)
 {
@@ -135,8 +137,10 @@ static esp_err_t low_level_upload_handler(httpd_req_t *req)
     size_t remaining = req->content_len;
     size_t index = 0;
 
+    auto scratch_buf = heap_alloc_array<uint8_t>(SCRATCH_BUFSIZE);
+
     while (remaining > 0) {
-        int received = httpd_req_recv(req, (char *)scratch_buf, MIN(remaining, SCRATCH_BUFSIZE));
+        int received = httpd_req_recv(req, (char *)scratch_buf.get(), MIN(remaining, SCRATCH_BUFSIZE));
         // Retry if timeout occurred
         if (received == HTTPD_SOCK_ERR_TIMEOUT) {
             continue;
@@ -151,7 +155,7 @@ static esp_err_t low_level_upload_handler(httpd_req_t *req)
         }
 
         remaining -= received;
-        if (!ctx->handler->uploadCallback(request, "not implemented", index, scratch_buf, received, remaining == 0)) {
+        if (!ctx->handler->uploadCallback(request, "not implemented", index, scratch_buf.get(), received, remaining == 0)) {
             return ESP_FAIL;
         }
 
@@ -280,7 +284,7 @@ const char *httpStatusCodeToString(int code)
     }
 }
 
-WebServerRequestReturnProtect WebServerRequest::send(uint16_t code, const char *content_type, const char *content, size_t content_len)
+WebServerRequestReturnProtect WebServerRequest::send(uint16_t code, const char *content_type, const char *content, ssize_t content_len)
 {
     auto result = httpd_resp_set_type(req, content_type);
     if (result != ESP_OK) {
@@ -349,13 +353,13 @@ void WebServerRequest::beginChunkedResponse(uint16_t code, const char *content_t
     }
 }
 
-void WebServerRequest::sendChunk(const char *chunk, size_t chunk_len)
+int WebServerRequest::sendChunk(const char *chunk, ssize_t chunk_len)
 {
     auto result = httpd_resp_send_chunk(req, chunk, chunk_len);
     if (result != ESP_OK) {
         printf("Failed to send response chunk: %d\n", result);
-        return;
     }
+    return result;
 }
 
 WebServerRequestReturnProtect WebServerRequest::endChunkedResponse()

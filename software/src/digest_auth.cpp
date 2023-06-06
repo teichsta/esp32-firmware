@@ -27,6 +27,9 @@
 #include "mbedtls/md5.h"
 #include "event_log.h"
 #include "build.h"
+#include "tools.h"
+
+#define MD5_LEN 32
 
 static bool getMD5(uint8_t * data, uint16_t len, char * output){//33 bytes or more
     mbedtls_md5_context _ctx;
@@ -53,9 +56,9 @@ static String genRandomString(){
   memcpy(data, &t, sizeof(t));
   t = build_timestamp();
   memcpy(data + 4, &t, sizeof(t));
-  uint32_t r = rand();
+  uint32_t r = esp_random();
   memcpy(data + 8, &r, sizeof(r));
-  r = rand();
+  r = esp_random();
   memcpy(data + 12, &r, sizeof(r));
 
   char buf[33] = {0};
@@ -65,12 +68,14 @@ static String genRandomString(){
 }
 
 static String stringMD5(const String& in){
-  char * out = (char*)malloc(33);
-  if(out == NULL || !getMD5((uint8_t*)(in.c_str()), in.length(), out))
-    return "";
-  String res = String(out);
-  free(out);
-  return res;
+    CoolString out;
+    if (!out.reserve(MD5_LEN + 1))
+        return "";
+
+    if(!getMD5((uint8_t*)(in.c_str()), in.length(), out.begin()))
+        return "";
+    out.setLength(MD5_LEN);
+    return out;
 }
 
 String requestDigestAuthentication(const char * realm){
@@ -148,7 +153,7 @@ AuthFields parseDigestAuth(const char *header)
     return result;
 }
 
-bool checkDigestAuthentication(AuthFields fields, const char * method, const char * username, const char * password, const char * realm, bool passwordIsHash, const char * nonce, const char * opaque, const char * uri){
+bool checkDigestAuthentication(const AuthFields &fields, const char * method, const char * username, const char * password, const char * realm, bool passwordIsHash, const char * nonce, const char * opaque, const char * uri){
     if (username == NULL || password == NULL || method == NULL) {
         logger.printfln("AUTH FAIL: missing required fields");
         return false;
@@ -182,8 +187,19 @@ bool checkDigestAuthentication(AuthFields fields, const char * method, const cha
     }
 
     String ha1 = (passwordIsHash) ? String(password) : stringMD5(fields.username + ":" + fields.realm + ":" + String(password));
+    if (passwordIsHash && ha1.length() < MD5_LEN) {
+        logger.printfln("AUTH FAIL: out of memory");
+        return false;
+    }
+
     String ha2 = String(method) + ":" + fields.uri;
-    String response = ha1 + ":" + fields.nonce + ":" + fields.nc + ":" + fields.cnonce + ":" + fields.qop + ":" + stringMD5(ha2);
+    ha2 = stringMD5(ha2);
+    if (ha2.length() < MD5_LEN) {
+        logger.printfln("AUTH FAIL: out of memory");
+        return false;
+    }
+
+    String response = ha1 + ":" + fields.nonce + ":" + fields.nc + ":" + fields.cnonce + ":" + fields.qop + ":" + ha2;
 
     if (fields.response.equals(stringMD5(response))) {
         return true;

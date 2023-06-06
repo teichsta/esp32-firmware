@@ -35,8 +35,15 @@ void Ocpp::pre_setup()
         {"enable", Config::Bool(false)},
         {"url", Config::Str("", 0, 128)},
         {"identity", Config::Str("", 0, 64)},
+        {"enable_auth",Config::Bool(false)},
         {"pass", Config::Str("", 0, 64)}
     });
+
+    change_configuration = Config::Object({
+        {"key", Config::Str("", 0, 64)},
+        {"value", Config::Str("", 0, 500)}
+    });
+
 #ifdef OCPP_STATE_CALLBACKS
     state = Config::Object({
         {"charge_point_state", Config::Uint8(0)},
@@ -58,7 +65,8 @@ void Ocpp::pre_setup()
         {"unavailable_requested", Config::Bool(false)},
 
         {"message_in_flight_type", Config::Uint8(0)},
-        {"message_in_flight_id", Config::Int32(0)},
+        {"message_in_flight_id_high", Config::Uint32(0)},
+        {"message_in_flight_id_low", Config::Uint32(0)},
         {"message_in_flight_len", Config::Uint32(0)},
         {"message_timeout", Config::Uint32(0)},
         {"txn_msg_retry_timeout", Config::Uint32(0)},
@@ -128,31 +136,42 @@ void Ocpp::setup()
     if (!config.get("enable")->asBool() || config.get("url")->asString().length() == 0)
         return;
 
-    String pass = config_in_use.get("pass")->asString();
+    cp = std::unique_ptr<OcppChargePoint>(new OcppChargePoint());
 
-    bool pass_is_hex = pass.length() == 40;
-    if (pass_is_hex) {
-        for(size_t i = 0; i < 40; ++i) {
-            if (!isxdigit(pass[i])) {
-                pass_is_hex = false;
-                break;
+    task_scheduler.scheduleOnce([this](){
+        // Make sure every code path calls cp->start!
+
+        task_scheduler.scheduleWithFixedDelay([this](){
+            cp->tick();
+        }, 100, 100);
+
+        if (!config_in_use.get("enable_auth")->asBool()) {
+            cp->start(config_in_use.get("url")->asEphemeralCStr(), config_in_use.get("identity")->asEphemeralCStr(), nullptr, 0);
+            return;
+        }
+
+        String pass = config_in_use.get("pass")->asString();
+        bool pass_is_hex = pass.length() == 40;
+        if (pass_is_hex) {
+            for(size_t i = 0; i < 40; ++i) {
+                if (!isxdigit(pass[i])) {
+                    pass_is_hex = false;
+                    break;
+                }
             }
         }
-    }
 
-    if (pass_is_hex) {
-        auto pass_bytes = std::unique_ptr<char[]>(new char[20]());
-        for(size_t i = 0; i < ARRAY_SIZE(pass_bytes); ++i) {
-            pass_bytes[i] = hex_digit_to_byte(pass[i]) << 4 | hex_digit_to_byte(pass[i]);
+        if (!pass_is_hex) {
+            cp->start(config.get("url")->asEphemeralCStr(), config_in_use.get("identity")->asEphemeralCStr(), (const uint8_t *)pass.c_str(), pass.length());
+            return;
         }
-        cp.start(config.get("url")->asEphemeralCStr(), config_in_use.get("identity")->asEphemeralCStr(), pass_bytes.get());
-    } else {
-        cp.start(config.get("url")->asEphemeralCStr(), config_in_use.get("identity")->asEphemeralCStr(), config_in_use.get("pass")->asEphemeralCStr());
-    }
 
-    task_scheduler.scheduleWithFixedDelay([this](){
-        cp.tick();
-    }, 100, 100);
+        uint8_t pass_bytes[20] = {};
+        for(size_t i = 0; i < 20; ++i) {
+            pass_bytes[i] = hex_digit_to_byte(pass[2*i]) << 4 | hex_digit_to_byte(pass[2*i + 1]);
+        }
+        cp->start(config.get("url")->asEphemeralCStr(), config_in_use.get("identity")->asEphemeralCStr(), pass_bytes, 20);
+    }, 5000);
 }
 
 void Ocpp::register_urls()
@@ -165,23 +184,14 @@ void Ocpp::register_urls()
     api.addCommand("ocpp/reset", Config::Null(), {}, [](){
         remove_directory("/ocpp");
     }, true);
-}
 
-void Ocpp::loop()
-{
-
-}
-
-static void remove_separator(const char * const in, char *out) {
-    int written = 0;
-    size_t s = strlen(in);
-    for(int i = 0; i < s; ++i) {
-        if (in[i] == ':')
-            continue;
-        out[written] = in[i];
-        ++written;
-    }
-    out[written] = '\0';
+#ifdef OCPP_DEBUG
+    api.addFeature("ocpp_debug");
+    api.addCommand("ocpp/change_configuration", &change_configuration, {}, [this](){
+        auto status = cp->changeConfig(change_configuration.get("key")->asEphemeralCStr(), change_configuration.get("value")->asEphemeralCStr());
+        logger.printfln("Change config %s status %s", change_configuration.get("key")->asEphemeralCStr(), ChangeConfigurationResponseStatusStrings[(size_t) status]);
+    }, true);
+#endif
 }
 
 void Ocpp::on_tag_seen(const char *tag_id) {

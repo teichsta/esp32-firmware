@@ -17,7 +17,7 @@
  * Boston, MA 02111-1307, USA.
  */
 
-import { h, Component, createContext, Context, VNode, cloneElement, toChildArray } from "preact";
+import { h, Component, createContext, Context, VNode, cloneElement, toChildArray, Fragment } from "preact";
 
 export interface FormRowProps {
     label: string
@@ -25,6 +25,10 @@ export interface FormRowProps {
     children: VNode | VNode[]
     labelColClasses?: string
     contentColClasses?: string
+    hidden?: boolean
+    label_prefix ?: VNode
+    label_infix ?: VNode
+    label_suffix ?: VNode
 }
 
 let id_counter = 0;
@@ -41,15 +45,23 @@ export class FormRow extends Component<FormRowProps, any> {
     }
 
     render(props: FormRowProps) {
+        let inner = <>{(toChildArray(props.children) as VNode[]).map(c => cloneElement(c, {idContext: this.idContext}))}</>;
+        if (props.contentColClasses === undefined || props.contentColClasses !== "")
+            inner = <div class={props.contentColClasses === undefined ? "col-lg-9 col-xl-6" : props.contentColClasses}>
+                {inner}
+            </div>
+
+
         return (
-            <div class="form-group row">
+            <div class="form-group row" hidden={props.hidden == undefined ? false : props.hidden}>
                 <label for={this.id} class={"col-form-label " + (props.labelColClasses === undefined ? "col-lg-3 col-xl-2" : props.labelColClasses)}>
-                    {props.label ? <span class={"form-label" + (props.label_muted ? " pr-2" : "")} dangerouslySetInnerHTML={{__html: props.label}}></span> : ""}
+                    {props.label_prefix ? props.label_prefix : <></>}
+                    {props.label ? <span class={"form-label" + (props.label_muted && !props.label_infix ? " pr-2" : "")} dangerouslySetInnerHTML={{__html: props.label}}></span> : ""}
+                    {props.label_infix ? props.label_infix : <></>}
                     {props.label_muted ? <span class="text-muted" dangerouslySetInnerHTML={{__html: props.label_muted}}></span> : ""}
+                    {props.label_suffix ? props.label_suffix : <></>}
                 </label>
-                <div class={props.contentColClasses === undefined ? "col-lg-9 col-xl-6" : props.contentColClasses}>
-                    {(toChildArray(props.children) as VNode[]).map(c => cloneElement(c, {idContext: this.idContext}))}
-                </div>
+                {inner}
             </div>
         );
     }

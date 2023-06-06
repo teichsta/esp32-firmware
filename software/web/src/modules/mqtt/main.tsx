@@ -22,7 +22,7 @@ import $ from "../../ts/jq";
 import * as API from "../../ts/api";
 import * as util from "../../ts/util";
 
-import { h, render, Fragment } from "preact";
+import { h, render, Fragment, Component } from "preact";
 import { __ } from "../../ts/translation";
 
 import { ConfigComponent } from "../../ts/components/config_component";
@@ -33,6 +33,7 @@ import { InputSelect } from "src/ts/components/input_select";
 import { InputNumber } from "../../ts/components/input_number";
 import { InputPassword } from "../../ts/components/input_password";
 import { Switch } from "../../ts/components/switch";
+import { IndicatorGroup } from "src/ts/components/indicator_group";
 
 type MqttConfig = API.getType['mqtt/config'];
 
@@ -47,11 +48,11 @@ export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
               __("mqtt.script.save_failed"),
               __("mqtt.script.reboot_content_changed"));
 
-        util.eventTarget.addEventListener('mqtt/auto_discovery_config', () => {
+        util.addApiEventListener('mqtt/auto_discovery_config', () => {
             this.setState({auto_discovery_config: API.get('mqtt/auto_discovery_config')});
         });
 
-        util.eventTarget.addEventListener('mqtt/meter_config', () => {
+        util.addApiEventListener('mqtt/meter_config', () => {
             this.setState({meter_config: API.get('mqtt/meter_config')});
         });
     }
@@ -65,8 +66,8 @@ export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
     }
 
     render(props: {}, state: Readonly<MqttConfig & MqttState>) {
-        if (!state)
-            return (<></>);
+        if (!util.render_allowed())
+            return <></>
 
         return (
             <>
@@ -87,7 +88,7 @@ export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
                     <FormRow label={__("mqtt.content.port")} label_muted={__("mqtt.content.port_muted")}>
                         <InputNumber required
                                      min={1}
-                                     max={65536}
+                                     max={65535}
                                      value={state.broker_port}
                                      onValue={this.set("broker_port")}/>
                     </FormRow>
@@ -135,9 +136,9 @@ export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
                         <FormRow label={__("mqtt.content.auto_discovery_mode")} label_muted={__("mqtt.content.auto_discovery_mode_muted")}>
                             <InputSelect
                                 items={[
-                                    ["-1", __("mqtt.content.auto_discovery_mode_disabled")],
-                                    ["0", __("mqtt.content.auto_discovery_mode_generic")],
-                                    ["1", __("mqtt.content.auto_discovery_mode_homeassistant")],
+                                    ["0", __("mqtt.content.auto_discovery_mode_disabled")],
+                                    ["1", __("mqtt.content.auto_discovery_mode_generic")],
+                                    ["2", __("mqtt.content.auto_discovery_mode_homeassistant")],
                                 ]}
                                 value={state.auto_discovery_config.auto_discovery_mode}
                                 onValue={(v) => {this.setState({auto_discovery_config: {...this.state.auto_discovery_config, auto_discovery_mode: parseInt(v)}})}}/>
@@ -178,20 +179,54 @@ export class Mqtt extends ConfigComponent<'mqtt/config', {}, MqttState> {
 
 render(<Mqtt/>, $('#mqtt')[0])
 
-function update_mqtt_state() {
-    let state = API.default_updater('mqtt/state', ['last_error'], false);
 
-    if(state.connection_state == 3) {
-        $('#mqtt_status_error').html(" " + state.last_error);
+interface MqttStatusState {
+    state: API.getType['mqtt/state']
+    config: API.getType['mqtt/config'];
+}
+
+export class MqttStatus extends Component<{}, MqttStatusState>
+{
+    constructor()
+    {
+        super();
+
+        util.addApiEventListener('mqtt/state', () => {
+            this.setState({state: API.get('mqtt/state')})
+        });
+
+        util.addApiEventListener('mqtt/config', () => {
+            this.setState({config: API.get('mqtt/config')})
+        });
+    }
+
+    render(props: {}, state: MqttStatusState)
+    {
+        if (!util.render_allowed() || !state.config.enable_mqtt)
+            return <></>;
+
+        return <>
+                <FormRow label={__("mqtt.status.connection")} labelColClasses="col-lg-4" contentColClasses="col-lg-8 col-xl-4">
+                    <IndicatorGroup
+                        style="width: 100%"
+                        class="flex-wrap"
+                        value={state.state.connection_state}
+                        items={[
+                            ["primary", __("mqtt.status.not_configured")],
+                            ["danger", __("mqtt.status.not_connected")],
+                            ["success", __("mqtt.status.connected")],
+                            ["danger", __("mqtt.status.error") + (state.state.connection_state != 3 ? "" : state.state.last_error)]
+                        ]}/>
+                </FormRow>
+            </>;
     }
 }
 
-export function add_event_listeners(source: API.APIEventTarget) {
-    source.addEventListener('mqtt/state', update_mqtt_state);
-}
+render(<MqttStatus/>, $('#status-mqtt')[0]);
 
-export function init() {
-}
+export function add_event_listeners(source: API.APIEventTarget) {}
+
+export function init() {}
 
 export function update_sidebar_state(module_init: any) {
     $('#sidebar-mqtt').prop('hidden', !module_init.mqtt);

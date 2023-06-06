@@ -24,6 +24,8 @@ import * as API from "./api";
 import { __ } from "./translation";
 
 import { AsyncModal } from "./components/async_modal";
+import { api_cache } from "./api_defs";
+import { batch, signal, Signal } from "@preact/signals-core";
 
 export function reboot() {
     API.call("reboot", null, "").then(() => postReboot(__("util.reboot_title"), __("util.reboot_text")));
@@ -125,7 +127,11 @@ export function format_timespan(secs: number) {
     return dayString + hourString + minString + secString;
 }
 
-export function toLocaleFixed(i: number, fractionDigits: number) {
+export function toLocaleFixed(i: number, fractionDigits?: number) {
+    if (fractionDigits === undefined) {
+        fractionDigits = 0;
+    }
+
     return i.toLocaleString(undefined, {
         minimumFractionDigits: fractionDigits,
         maximumFractionDigits: fractionDigits
@@ -177,7 +183,30 @@ let ws: WebSocket = null;
 
 const RECONNECT_TIME = 12000;
 
+export function addApiEventListener<T extends keyof API.EventMap>(type: T, listener: (this: API.APIEventTarget, ev: API.EventMap[T]) => any, options?: boolean | AddEventListenerOptions) {
+    eventTarget.addEventListener(type, listener);
+    if (api_cache[type])
+    {
+        API.trigger(type, eventTarget);
+    }
+}
+
+export function addApiEventListener_unchecked(type: string, callback: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions): void {
+    eventTarget.addEventListener_unchecked(type, callback, options);
+    let api_cache_any = api_cache as any;
+    if (api_cache_any[type])
+    {
+        API.trigger_unchecked(type, eventTarget);
+    }
+}
+
 export let eventTarget: API.APIEventTarget = new API.APIEventTarget();
+
+let allow_render: Signal<boolean> = signal(false);
+
+export function render_allowed() {
+    return allow_render.value;
+}
 
 export function setupEventSource(first: boolean, keep_as_first: boolean, continuation: (ws: WebSocket, eventTarget: API.APIEventTarget) => void) {
     if (!first) {
@@ -205,23 +234,27 @@ export function setupEventSource(first: boolean, keep_as_first: boolean, continu
         }
         wsReconnectTimeout = window.setTimeout(wsReconnectCallback, RECONNECT_TIME);
 
-        let topics = [];
-        for (let item of e.data.split("\n")) {
-            if (item == "")
-                continue;
-            let obj = JSON.parse(item);
-            if (!("topic" in obj) || !("payload" in obj)) {
-                console.log("Received malformed event", obj);
-                return;
-            }
+        let topics: any[] = [];
+        batch(() => {
+            for (let item of e.data.split("\n")) {
+                if (item == "")
+                    continue;
+                let obj = JSON.parse(item);
+                if (!("topic" in obj) || !("payload" in obj)) {
+                    console.log("Received malformed event", obj);
+                    return;
+                }
 
-            topics.push(obj["topic"]);
-            API.update(obj["topic"], obj["payload"]);
-        }
+                topics.push(obj["topic"]);
+                API.update(obj["topic"], obj["payload"]);
+            }
+        });
 
         for (let topic of topics) {
             API.trigger(topic, eventTarget);
         }
+
+        allow_render.value = true;
     }
 
     continuation(ws, eventTarget);
@@ -236,6 +269,7 @@ export function pauseWebSockets() {
 
 export function resumeWebSockets() {
     wsReconnectTimeout = window.setTimeout(wsReconnectCallback, RECONNECT_TIME);
+    wsReconnectCallback();
 }
 
 export function postReboot(alert_title: string, alert_text: string) {
@@ -251,7 +285,7 @@ export function postReboot(alert_title: string, alert_text: string) {
                 // so this will even work if downgrading to an version older than
                 // 1.1.0
                 console.log("setting up...");
-                eventSource.addEventListener('info/version', function (e) {
+                eventSource.addEventListener_unchecked('info/version', function (e) {
                     console.log("reloading");
                     window.location.reload();
                 }, false);})
@@ -314,11 +348,81 @@ function iso8601ButLocal(date: Date) {
     return dateLocal.toISOString().slice(0, -1);
 }
 
+const INDEX_BY_CODE_POINT = new Map([
+	[338, 12],
+	[339, 28],
+	[352, 10],
+	[353, 26],
+	[376, 31],
+	[381, 14],
+	[382, 30],
+	[402, 3],
+	[710, 8],
+	[732, 24],
+	[8211, 22],
+	[8212, 23],
+	[8216, 17],
+	[8217, 18],
+	[8218, 2],
+	[8220, 19],
+	[8221, 20],
+	[8222, 4],
+	[8224, 6],
+	[8225, 7],
+	[8226, 21],
+	[8230, 5],
+	[8240, 9],
+	[8249, 11],
+	[8250, 27],
+	[8364, 0],
+	[8482, 25]
+]);
+
+// Based on https://www.npmjs.com/package/windows-1252
+export const win1252Encode = (input: string) => {
+    // Undo the insertion of unicode soft hyphen characters.
+    // Those can't be encoded in cp1252
+    input = input.replace(/\u00AD/g, "");
+	const length = input.length;
+	const result = new Uint8Array(length);
+	for (let index = 0; index < length; index++) {
+		const codePoint = input.charCodeAt(index);
+		// “If `code point` is an ASCII code point, return a byte whose
+		// value is `code point`.”
+		if ((0x00 <= codePoint && codePoint <= 0x7F) || (0xA0 <= codePoint && codePoint <= 0xFF)) {
+			result[index] = codePoint;
+			continue;
+		}
+		// “Let `pointer` be the index pointer for `code point` in index
+		// single-byte.”
+		if (INDEX_BY_CODE_POINT.has(codePoint)) {
+			const pointer = INDEX_BY_CODE_POINT.get(codePoint);
+			// “Return a byte whose value is `pointer + 0x80`.”
+			result[index] = pointer + 0x80;
+		} else {
+			// “If `pointer` is `null`, replace with ¶
+			result[index] = 0xB6;
+		}
+	}
+	return result;
+};
+
+export function parseIP(ip: string) {
+    return ip.split(".").map((x, i, _) => parseInt(x, 10) * (1 << (8 * (3 - i)))).reduce((a, b) => a+b);
+};
+
+export function unparseIP(ip: number) {
+    return ((ip >> 24) & 0xFF).toString() + "." +
+           ((ip >> 16) & 0xFF).toString() + "." +
+           ((ip >> 8 ) & 0xFF).toString() + "." +
+           ((ip >> 0 ) & 0xFF).toString();
+}
+
 export function downloadToFile(content: BlobPart, filename_prefix: string, extension: string, contentType: string) {
     const a = document.createElement('a');
     const file = new Blob([content], {type: contentType});
     let t = iso8601ButLocal(new Date()).replace(/:/gi, "-").replace(/\./gi, "-");
-    let name = API.get('info/name').name;
+    let name = API.get_maybe('info/name')?.name ?? "unknown_uid";
 
     a.href= URL.createObjectURL(file);
     a.download = filename_prefix + "-" + name + "-" + t + "." + extension;
@@ -334,15 +438,11 @@ export function getShowRebootModalFn(changed_value_name: string) {
     }
 }
 
-export function timestamp_min_to_date(timestamp_minutes: number, unsynced_string: string) {
-    if (timestamp_minutes == 0) {
-        return unsynced_string;
-    }
-    let date_fmt: any = { year: 'numeric', month: '2-digit', day: '2-digit'};
-    let time_fmt: any = {hour: '2-digit', minute:'2-digit' };
+function timestamp_to_date(timestamp: number, time_fmt: any) {
+    let date_fmt: any = {year: 'numeric', month: '2-digit', day: '2-digit'};
     let fmt = Object.assign({}, date_fmt, time_fmt);
 
-    let date = new Date(timestamp_minutes * 60000);
+    let date = new Date(timestamp);
     let result = date.toLocaleString([], fmt);
 
     let date_result = date.toLocaleDateString([], date_fmt);
@@ -360,6 +460,18 @@ export function timestamp_min_to_date(timestamp_minutes: number, unsynced_string
     }
 
     return result;
+}
+
+export function timestamp_min_to_date(timestamp_minutes: number, unsynced_string: string) {
+    if (timestamp_minutes == 0) {
+        return unsynced_string;
+    }
+
+    return timestamp_to_date(timestamp_minutes * 60000, {hour: '2-digit', minute: '2-digit'});
+}
+
+export function timestamp_sec_to_date(timestamp_seconds: number) {
+    return timestamp_to_date(timestamp_seconds * 1000, {hour: '2-digit', minute: '2-digit', second: '2-digit'});
 }
 
 export function upload(data: Blob, url: string, progress: (i: number) => void = i => {}, contentType?: string, timeout_ms: number = 5000) {
@@ -448,13 +560,23 @@ export async function put(url: string, payload: any, timeout_ms: number = 5000) 
 
 export const async_modal_ref: RefObject<AsyncModal> = createRef();
 
+export function isInteger(x: number) {
+    return !isNaN(x) && (x === (x | 0));
+}
+
 export function range(stopOrStart: number, stop?: number) {
     if (stop === undefined) {
-        stop = stopOrStart
-        stopOrStart = 0
+        stop = stopOrStart;
+        stopOrStart = 0;
     }
 
-    const len = (stop - stopOrStart)
+    if (!isInteger(stopOrStart))
+        throw "util.range: stopOrStart was not an integer";
+
+    if (!isInteger(stop))
+        throw "util.range: stop was not an integer";
+
+    const len = stop - stopOrStart;
     if (len <= 0)
         return [];
 
@@ -484,4 +606,18 @@ export function clamp(min: number | undefined, x: number, max: number | undefine
     if (min !== undefined)
         result = Math.max(min, result);
     return result;
+}
+
+export function leftPad(s: string | number, c: string | number, len: number) {
+    s = s.toString();
+    c = c.toString();
+    while (s.length < len) {
+        s = c + s;
+    }
+    return s.slice(-len);
+}
+
+export function hasValue(a: any): boolean
+{
+    return a !== null && a !== undefined;
 }

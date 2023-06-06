@@ -33,7 +33,16 @@
 
 extern uint32_t local_uid_num;
 
-#define MODBUS_TABLE_VERSION 1
+// MODBUS TABLE CHANGELOG
+// 1 - Initial release
+// 2 - Add coils 1000, 1001
+#define MODBUS_TABLE_VERSION 2
+
+template<typename T>
+static void calloc_struct(T **out)
+{
+    *out = (T *)calloc(1, sizeof(T));
+}
 
 // We can't implicit convert from an uint32_t to this, as the conversion is done by a constructor.
 // If we add a constructor, this is not a POD type anymore so we can't use it in packed structs.
@@ -103,6 +112,13 @@ struct meter_all_values_input_regs_t {
     floatswapped_t meter_values[85];
 };
 
+struct nfc_input_regs_t {
+    static const mb_param_type_t TYPE = MB_PARAM_INPUT;
+    static const uint16_t OFFSET = 4000;
+    uint32swapped_t tag_id[5];
+    uint32swapped_t tag_id_age;
+};
+
 //-------------------
 // Holding Registers
 //-------------------
@@ -118,6 +134,8 @@ struct evse_holding_regs_t {
     static const uint16_t OFFSET = 1000;
     uint32swapped_t enable_charging;
     uint32swapped_t allowed_current;
+    uint32swapped_t led_blink_state;
+    uint32swapped_t led_blink_duration;
 };
 
 struct meter_holding_regs_t {
@@ -275,6 +293,7 @@ struct discrete_inputs_t {
     bool meter:1;
     bool meter_phases:1;
     bool meter_all_values:1;
+    bool nfc:1;
 };
 
 struct meter_discrete_inputs_t {
@@ -288,10 +307,21 @@ struct meter_discrete_inputs_t {
     bool phase_three_active:1;
 };
 
+//-------------------
+// Coils
+//-------------------
+struct evse_coils_t {
+    static const mb_param_type_t TYPE = MB_PARAM_COIL;
+    static const uint16_t OFFSET = 1000;
+    bool enable_charging:1;
+    bool autostart_button:1;
+};
+
 static input_regs_t *input_regs, *input_regs_copy;
 static evse_input_regs_t *evse_input_regs, *evse_input_regs_copy;
 static meter_input_regs_t *meter_input_regs, *meter_input_regs_copy;
 static meter_all_values_input_regs_t *meter_all_values_input_regs, *meter_all_values_input_regs_copy;
+static nfc_input_regs_t *nfc_input_regs, *nfc_input_regs_copy;
 
 static holding_regs_t *holding_regs, *holding_regs_copy;
 static evse_holding_regs_t *evse_holding_regs, *evse_holding_regs_copy;
@@ -300,6 +330,7 @@ static meter_holding_regs_t *meter_holding_regs, *meter_holding_regs_copy;
 static discrete_inputs_t *discrete_inputs, *discrete_inputs_copy;
 static meter_discrete_inputs_t *meter_discrete_inputs, *meter_discrete_inputs_copy;
 
+static evse_coils_t *evse_coils, *evse_coils_copy;
 
 static bender_general_s *bender_general, *bender_general_cpy;
 static bender_phases_s *bender_phases, *bender_phases_cpy;
@@ -338,6 +369,8 @@ static void allocate_table()
     calloc_struct(&meter_input_regs_copy);
     calloc_struct(&meter_all_values_input_regs);
     calloc_struct(&meter_all_values_input_regs_copy);
+    calloc_struct(&nfc_input_regs);
+    calloc_struct(&nfc_input_regs_copy);
     calloc_struct(&holding_regs);
     calloc_struct(&holding_regs_copy);
     calloc_struct(&evse_holding_regs);
@@ -348,6 +381,8 @@ static void allocate_table()
     calloc_struct(&discrete_inputs_copy);
     calloc_struct(&meter_discrete_inputs);
     calloc_struct(&meter_discrete_inputs_copy);
+    calloc_struct(&evse_coils);
+    calloc_struct(&evse_coils_copy);
 }
 
 static void allocate_bender_table()
@@ -424,6 +459,10 @@ void ModbusTcp::setup()
             REGISTER_DESCRIPTOR(meter_holding_regs);
             REGISTER_DESCRIPTOR(discrete_inputs);
             REGISTER_DESCRIPTOR(meter_discrete_inputs);
+            REGISTER_DESCRIPTOR(evse_coils);
+            REGISTER_DESCRIPTOR(nfc_input_regs);
+
+            evse_holding_regs->led_blink_state = fromUint(-2);
         }
         else if (config.get("table")->asUint() == 1)
         {
@@ -598,14 +637,73 @@ void ModbusTcp::update_bender_regs()
     portEXIT_CRITICAL(&mtx);
 }
 
+static inline void swap_bytes(char *str, size_t len) {
+    char tmp;
+    for (int i = 0; i < len; i += 2) {
+        tmp = str[i];
+        str[i] = str[i + 1];
+        str[i + 1] = tmp;
+    }
+}
+
 void ModbusTcp::update_regs()
 {
+    bool call_start_charging = false;
+    bool call_stop_charging = false;
+    bool enable_charging = !api.hasFeature("evse") ? false : api.getState("evse/slots")->get(CHARGING_SLOT_MODBUS_TCP_ENABLE)->get("max_current")->asUint() == 32000;
+    bool reset_meter = false;
+    bool set_evse_led = false;
+
+    bool autostart_slot = !api.hasFeature("evse") ? false : api.getState("evse/slots")->get(CHARGING_SLOT_AUTOSTART_BUTTON)->get("max_current")->asUint() == 32000;
+
     // We want to keep the critical sections as small as possible
     // -> Do all work in a copy of the registers.
+    // However if we read _and_ write a register, we have to write back the new value immediately.
+    // Otherwise we would overwrite and ignore a value that was written between the critical sections.
     portENTER_CRITICAL(&mtx);
+        reset_meter = meter_holding_regs->trigger_reset == meter_holding_regs->TRIGGER_RESET_PASSWORD;
+        // Clear the trigger_reset register to make sure the meter is reset only once.
+        meter_holding_regs->trigger_reset = fromUint(0);
+
+        if (evse_holding_regs->enable_charging != evse_holding_regs_copy->enable_charging)
+            enable_charging = evse_holding_regs->enable_charging != 0;
+
+        // Prefer (new!) enable charging coil over (deprecated!) holding register.
+        if (evse_coils->enable_charging != evse_coils_copy->enable_charging)
+            enable_charging = evse_coils->enable_charging;
+
+        /*
+        autostart_button logic
+        ----------------------
+        slot  reg reg_copy new_reg call     comment
+        0     0   0        0       ---      nothing changed
+        0     0   1        0       ---      master wrote a 0. slot changed to 0 (i.e. button was pressed/stop_charging was called)
+        0     1   0        1       start    master wrote a 1. slot unchanged.
+        0     1   1        0       ---      slot changed to 0. (i.e. button was pressed/stop_charging was called)
+        1     0   0        1       ---      slot changed to 1. (i.e. button was pressed/start_charging was called)
+        1     0   1        0       stop     master wrote a 0. slot unchanged.
+        1     1   0        1       ---      master wrote a 1. slot changed to 1 (i.e. button was pressed/start_charging was called)
+        1     1   1        1       ---      nothing changed
+
+        new_reg = slot ? (reg || !copy) : (reg && !copy);
+        */
+
+        call_start_charging = !autostart_slot && evse_coils->autostart_button && !evse_coils_copy->autostart_button;
+        call_stop_charging = autostart_slot && !evse_coils->autostart_button && evse_coils_copy->autostart_button;
+        evse_coils->autostart_button = autostart_slot ? (evse_coils->autostart_button || !evse_coils_copy->autostart_button)
+                                                      : (evse_coils->autostart_button && !evse_coils_copy->autostart_button);
+
+
         *holding_regs_copy = *holding_regs;
         *evse_holding_regs_copy = *evse_holding_regs;
         *meter_holding_regs_copy = *meter_holding_regs;
+        *evse_coils_copy = *evse_coils;
+
+        if (evse_holding_regs->led_blink_duration != 0 && evse_holding_regs->led_blink_state != -2) {
+            set_evse_led = true;
+            evse_holding_regs->led_blink_duration = fromUint(0);
+            evse_holding_regs->led_blink_state = fromUint(-2);
+        }
     portEXIT_CRITICAL(&mtx);
 
     bool write_allowed = false;
@@ -624,6 +722,21 @@ void ModbusTcp::update_regs()
     input_regs_copy->firmware_build_ts = fromUint(build_timestamp());
     input_regs_copy->uptime = fromUint((uint32_t)(esp_timer_get_time() / 1000000));
 
+#if MODULE_NFC_AVAILABLE()
+    if (api.hasFeature("nfc")) {
+        discrete_inputs_copy->nfc = true;
+        auto tag = nfc.old_tags[0];
+        auto injected_tag = nfc.old_tags[TAG_LIST_LENGTH - 1];
+        char buf[NFC_TAG_ID_STRING_LENGTH + 1] = {0};
+        if (tag.last_seen > injected_tag.last_seen && injected_tag.last_seen > 0)
+            tag = injected_tag;
+        remove_separator(tag.tag_id, buf);
+        swap_bytes(buf, 20);
+        memcpy(&nfc_input_regs_copy->tag_id, buf, 20);
+        nfc_input_regs_copy->tag_id_age = fromUint(tag.last_seen);
+    }
+#endif
+
 #if MODULE_EVSE_V2_AVAILABLE() || MODULE_EVSE_AVAILABLE()
     if (api.hasFeature("evse"))
     {
@@ -631,12 +744,15 @@ void ModbusTcp::update_regs()
         evse_input_regs_copy->iec_state = fromUint(api.getState("evse/state")->get("iec61851_state")->asUint());
         evse_input_regs_copy->charger_state = fromUint(api.getState("evse/state")->get("charger_state")->asUint());
 
+        if (set_evse_led)
+            evse_led.set_api(EvseLed::Blink((uint32_t)evse_holding_regs_copy->led_blink_state), evse_holding_regs_copy->led_blink_duration);
+
 #if MODULE_EVSE_V2_AVAILABLE()
         evse_v2.set_modbus_current(evse_holding_regs_copy->allowed_current);
-        evse_v2.set_modbus_enabled(evse_holding_regs_copy->enable_charging);
+        evse_v2.set_modbus_enabled(enable_charging);
 #elif MODULE_EVSE_AVAILABLE()
         evse.set_modbus_current(evse_holding_regs_copy->allowed_current);
-        evse.set_modbus_enabled(evse_holding_regs_copy->enable_charging);
+        evse.set_modbus_enabled(enable_charging);
 #endif
 
         auto slots = api.getState("evse/slots");
@@ -656,6 +772,11 @@ void ModbusTcp::update_regs()
         evse_input_regs_copy->max_current = fromUint(api.getState("evse/state")->get("allowed_charging_current")->asUint());
         evse_input_regs_copy->start_time_min = fromUint(0);
         evse_input_regs_copy->charging_time_sec = fromUint(0);
+
+        if (write_allowed && call_start_charging)
+            api.callCommand("evse/start_charging", nullptr);
+        if (write_allowed && call_stop_charging)
+            api.callCommand("evse/stop_charging", nullptr);
 
 #if MODULE_CHARGE_TRACKER_AVAILABLE()
         int32_t user_id = api.getState("charge_tracker/current_charge")->get("user_id")->asInt();
@@ -693,7 +814,7 @@ void ModbusTcp::update_regs()
             meter_input_regs_copy->energy_this_charge = fromFloat(meter_input_regs_copy->energy_absolute - meter_start);
 #endif
 
-        if (meter_holding_regs_copy->trigger_reset == meter_holding_regs_copy->TRIGGER_RESET_PASSWORD && write_allowed)
+        if (reset_meter && write_allowed)
             api.callCommand("meter/reset", {});
     }
 
@@ -721,6 +842,11 @@ void ModbusTcp::update_regs()
     }
 #endif
 
+    // DO NOT write back into holding registers and coils here.
+    // Write ONLY input registers and discrete inputs.
+    // If we want to read and write the same register, writing into it
+    // has to be done in the first critical section, not this one.
+    // Otherwise we would overwrite and ignore a value that was written between the critical sections.
     portENTER_CRITICAL(&mtx);
         *input_regs = *input_regs_copy;
         *evse_input_regs = *evse_input_regs_copy;
@@ -728,6 +854,7 @@ void ModbusTcp::update_regs()
         *meter_all_values_input_regs = *meter_all_values_input_regs_copy;
         *discrete_inputs = *discrete_inputs_copy;
         *meter_discrete_inputs = *meter_discrete_inputs_copy;
+        *nfc_input_regs = *nfc_input_regs_copy;
     portEXIT_CRITICAL(&mtx);
 }
 
@@ -848,9 +975,9 @@ void ModbusTcp::update_keba_regs()
 #if MODULE_METER_AVAILABLE()
     if (api.hasFeature("meter"))
     {
-        bool charging = false;
-
 #if MODULE_CHARGE_TRACKER_AVAILABLE()
+        int32_t user_id = api.getState("charge_tracker/current_charge")->get("user_id")->asInt();
+        bool charging = user_id != -1;
         auto meter_absolute = api.getState("meter/values")->get("energy_abs")->asFloat();
         auto meter_start = api.getState("charge_tracker/current_charge")->get("meter_start")->asFloat();
 
@@ -902,7 +1029,8 @@ void ModbusTcp::register_urls()
         {
 
             uint16_t allowed_current = 32000;
-            uint8_t enable_charging = 1;
+            bool enable_charging = false;
+            bool autostart_button = false;
 
     #if MODULE_EVSE_V2_AVAILABLE() || MODULE_EVSE_AVAILABLE()
             if (api.hasFeature("evse"))
@@ -910,6 +1038,7 @@ void ModbusTcp::register_urls()
                 auto slots = api.getState("evse/slots");
                 allowed_current = slots->get(CHARGING_SLOT_MODBUS_TCP)->get("max_current")->asUint();
                 enable_charging = slots->get(CHARGING_SLOT_MODBUS_TCP_ENABLE)->get("max_current")->asUint() == 32000;
+                autostart_button = slots->get(CHARGING_SLOT_AUTOSTART_BUTTON)->get("max_current")->asUint() == 32000;
             }
     #endif
 
@@ -923,6 +1052,12 @@ void ModbusTcp::register_urls()
 
                 evse_holding_regs->allowed_current = fromUint(allowed_current);
                 evse_holding_regs->enable_charging = fromUint(enable_charging);
+
+                evse_coils->autostart_button = autostart_button;
+                evse_coils_copy->autostart_button = autostart_button;
+
+                evse_coils->enable_charging = enable_charging;
+                evse_coils_copy->enable_charging = enable_charging;
             portEXIT_CRITICAL(&mtx);
 
             task_scheduler.scheduleWithFixedDelay([this]() {
@@ -959,5 +1094,3 @@ void ModbusTcp::register_urls()
         }
     }
 }
-
-void ModbusTcp::loop() {}

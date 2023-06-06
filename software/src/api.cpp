@@ -37,13 +37,14 @@ void API::pre_setup()
 {
     features = Config::Array(
         {},
-        new Config{Config::Str("")},
+        new Config{Config::Str("", 0, 32)},
         0, 20, Config::type_id<Config::ConfString>()
     );
 
     version = Config::Object({
-        {"firmware", Config::Str(build_version_full_str())},
+        {"firmware", Config::Str(build_version_full_str(), 0, strlen(build_version_full_str()))},
         {"config", Config::Str("", 0, 12)},
+        {"config_type", Config::Str("", 0, 32)},
     });
 }
 
@@ -51,9 +52,25 @@ void API::setup()
 {
     migrate_config();
 
-    String config_version = read_config_version();
-    logger.printfln("%s config version: %s", BUILD_DISPLAY_NAME, config_version.c_str());
+    String config_version;
+    String config_type;
+    if (LittleFS.exists("/config/version")) {
+        StaticJsonDocument<JSON_OBJECT_SIZE(2) + 60> doc;
+        File file = LittleFS.open("/config/version", "r");
+
+        deserializeJson(doc, file);
+        file.close();
+
+        config_version = doc["spiffs"].as<String>();
+        config_type    = doc["config_type"].as<String>();
+    } else {
+        logger.printfln("Failed to read config version!");
+        config_version = BUILD_VERSION_STRING;
+        config_type    = BUILD_CONFIG_TYPE;
+    }
+    logger.printfln("%s config version: %s (%s)", BUILD_DISPLAY_NAME, config_version.c_str(), config_type.c_str());
     version.get("config")->updateString(config_version);
+    version.get("config_type")->updateString(config_type);
 
     task_scheduler.scheduleWithFixedDelay([this]() {
         for (size_t state_idx = 0; state_idx < states.size(); ++state_idx) {
@@ -87,7 +104,7 @@ void API::addCommand(const String &path, ConfigRoot *config, std::initializer_li
     if (already_registered(path, "command"))
         return;
 
-    commands.push_back({path, config, callback, keys_to_censor_in_debug_report, is_action, ""});
+    commands.push_back({path, config, callback, keys_to_censor_in_debug_report, is_action});
     auto commandIdx = commands.size() - 1;
 
     for (auto *backend : this->backends) {
@@ -174,6 +191,19 @@ void API::addRawCommand(const String &path, std::function<String(char *, size_t)
     }
 }
 
+void API::addResponse(const String &path, ConfigRoot *config, std::initializer_list<String> keys_to_censor_in_debug_report, std::function<void(IChunkedResponse *, Ownership *, uint32_t)> callback)
+{
+    if (already_registered(path, "response"))
+        return;
+
+    responses.push_back({path, config, callback, keys_to_censor_in_debug_report});
+    auto responseIdx = responses.size() - 1;
+
+    for (auto *backend : this->backends) {
+        backend->addResponse(responseIdx, responses[responseIdx]);
+    }
+}
+
 bool API::hasFeature(const char *name)
 {
     for (int i = 0; i < features.count(); ++i)
@@ -222,27 +252,6 @@ void API::removeConfig(const String &path) {
 
 void API::removeAllConfig() {
     remove_directory("/config");
-}
-
-void API::blockCommand(const String &path, const String &reason)
-{
-    for (auto &reg : commands) {
-        if (reg.path != path) {
-            continue;
-        }
-
-        reg.blockedReason = reason;
-    }
-}
-
-void API::unblockCommand(const String &path)
-{
-    blockCommand(path, "");
-}
-
-const String &API::getCommandBlockedReason(size_t commandIdx) const
-{
-    return this->commands[commandIdx].blockedReason;
 }
 
 /*
@@ -332,6 +341,13 @@ void API::registerDebugUrl(WebServer *server)
             result += reg.config->to_string_except(reg.keys_to_censor_in_debug_report);
         }
 
+        for (auto &reg : responses) {
+            result += ",\n \"";
+            result += reg.path;
+            result += "\": ";
+            result += reg.config->to_string_except(reg.keys_to_censor_in_debug_report);
+        }
+
         result += "}";
 
         return request.send(200, "application/json; charset=utf-8", result.c_str());
@@ -341,13 +357,13 @@ void API::registerDebugUrl(WebServer *server)
     this->addState("info/version", &version, {}, 1000);
 }
 
-void API::registerBackend(IAPIBackend *backend)
+size_t API::registerBackend(IAPIBackend *backend)
 {
-    backends.push_back(backend);
-}
+    size_t backendIdx = backends.size();
 
-void API::loop()
-{
+    backends.push_back(backend);
+
+    return backendIdx;
 }
 
 String API::callCommand(const String &path, const Config::ConfUpdate &payload)
@@ -427,6 +443,12 @@ bool API::already_registered(const String &path, const char *api_type)
         if (reg.path != path)
             continue;
         logger.printfln("Can't register %s %s. Already registered as raw command!", api_type, path.c_str());
+        return true;
+    }
+    for (auto &reg : this->responses) {
+        if (reg.path != path)
+            continue;
+        logger.printfln("Can't register %s %s. Already registered as response!", api_type, path.c_str());
         return true;
     }
 

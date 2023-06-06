@@ -24,7 +24,6 @@
 #include "task_scheduler.h"
 
 #include <ESPmDNS.h>
-#include "NetBIOS.h"
 
 extern char local_uid_str[32];
 
@@ -32,7 +31,8 @@ void Network::pre_setup()
 {
     config = Config::Object({
         {"hostname", Config::Str("replaceme", 0, 32)},
-        {"enable_mdns", Config::Bool(true)}
+        {"enable_mdns", Config::Bool(true)},
+        {"web_server_port", Config::Uint16(80)}
     });
 }
 
@@ -60,9 +60,4 @@ void Network::register_urls()
         logger.printfln("mDNS responder started");
     }
     MDNS.addService("http", "tcp", 80);
-    NBNS.begin(config.get("hostname")->asEphemeralCStr());
-}
-
-void Network::loop()
-{
 }

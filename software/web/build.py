@@ -65,7 +65,7 @@ def main():
     ]
 
     if JS_ANALYZE:
-        args += ['--analyze=verbose']
+        args += ['--analyze']
 
     if build_args.js_source_map:
         args += ['--sourcemap']
@@ -73,7 +73,7 @@ def main():
     subprocess.check_call(args, shell=sys.platform == 'win32')
 
     if build_args.js_source_map:
-        with open(os.path.join(BUILD_DIR, 'bundle.min.js'), 'r') as f:
+        with open(os.path.join(BUILD_DIR, 'bundle.min.js'), 'r', encoding='utf-8') as f:
             js_src = f.read()
 
         with open(os.path.join(BUILD_DIR, 'bundle.min.js.map'), 'rb') as f:
@@ -83,7 +83,7 @@ def main():
 
         js_src = js_src.replace('sourceMappingURL=bundle.min.js.map', 'sourceMappingURL=data:text/json;base64,{0}'.format(js_map))
 
-        with open(os.path.join(BUILD_DIR, 'bundle.min.js'), 'w') as f:
+        with open(os.path.join(BUILD_DIR, 'bundle.min.js'), 'w', encoding='utf-8') as f:
             f.write(js_src)
 
     print('sass...')
@@ -102,12 +102,13 @@ def main():
 
     subprocess.check_call(args, shell=sys.platform == 'win32')
 
-    print('postcss...')
+    print('update-browserslist-db...')
     subprocess.check_call([
         'npx',
         'update-browserslist-db'
     ], shell=sys.platform == 'win32')
 
+    print('postcss...')
     subprocess.check_call([
         'npx',
         'postcss',

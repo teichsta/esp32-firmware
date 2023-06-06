@@ -25,20 +25,16 @@
 #include "event_log.h"
 #include "modules.h"
 #include "task_scheduler.h"
+#include "tools.h"
 #include "web_server.h"
 
 #include <ESPmDNS.h>
-#include "NetBIOS.h"
 #include "lwip/ip_addr.h"
 #include "lwip/opt.h"
 #include "lwip/dns.h"
 #include <cstring>
 
 #include "TFJson.h"
-
-void CMNetworking::pre_setup()
-{
-}
 
 void CMNetworking::setup()
 {
@@ -63,12 +59,12 @@ void CMNetworking::register_urls()
 
 // If we don't have the evse or evse_v2 module, but have cm_networking, this is probably an energy manager.
 // We only want to announce manageable chargers, not managers.
-#if MODULE_EVSE_AVAILABLE() || MODULE_EVSE_V2_AVAILABLE()
+#if MODULE_NETWORK_AVAILABLE() && (MODULE_EVSE_AVAILABLE() || MODULE_EVSE_V2_AVAILABLE())
     if (!network.config.get("enable_mdns")->asBool())
         return;
 
     MDNS.addService("tf-warp-cm", "udp", 34127);
-    MDNS.addServiceTxt("tf-warp-cm", "udp", "version", __XSTRING(CM_PACKET_MAGIC) "." __XSTRING(CM_PROTOCOL_VERSION));
+    MDNS.addServiceTxt("tf-warp-cm", "udp", "version", MACRO_VALUE_TO_STRING(CM_PACKET_MAGIC) "." MACRO_VALUE_TO_STRING(CM_PROTOCOL_VERSION));
     task_scheduler.scheduleWithFixedDelay([](){
         #if MODULE_DEVICE_NAME_AVAILABLE()
             // Keep "display_name" updated because it can be changed at runtime without clicking "Save".
@@ -86,10 +82,6 @@ void CMNetworking::register_urls()
         MDNS.addServiceTxt("tf-warp-cm", "udp", "enabled", management_enabled ? "true" : "false");
     }, 0, 10000);
 #endif
-}
-
-void CMNetworking::loop()
-{
 }
 
 int CMNetworking::create_socket(uint16_t port)
@@ -140,8 +132,15 @@ static void dns_callback(const char *host, const ip_addr_t *ip, void *args)
 
 void CMNetworking::resolve_hostname(uint8_t charger_idx)
 {
+    if (this->hostnames[charger_idx].endsWith(".local")) {
+        if (!periodic_scan_task_started)
+            task_scheduler.scheduleWithFixedDelay([this](){this->start_scan();}, 0, 60 * 1000);
+        periodic_scan_task_started = true;
+        return;
+    }
+
     ip_addr_t ip;
-    int err = dns_gethostbyname(hostnames[charger_idx].c_str(), &ip, dns_callback, &resolve_state[charger_idx]);
+    int err = dns_gethostbyname_addrtype(hostnames[charger_idx].c_str(), &ip, dns_callback, &resolve_state[charger_idx], LWIP_DNS_ADDRTYPE_IPV4);
 
     if (err == ERR_VAL)
         logger.printfln("Charge manager has charger configured with hostname %s, but no DNS server is configured!", hostnames[charger_idx].c_str());
@@ -167,19 +166,26 @@ bool CMNetworking::is_resolved(uint8_t charger_idx) {
     return resolve_state[charger_idx] == RESOLVE_STATE_RESOLVED;
 }
 
+void CMNetworking::clear_cached_hostname(uint8_t charger_idx) {
+    const char *hostname = hostnames[charger_idx].c_str();
+    auto err = dns_removehost(hostname, nullptr);
+    if (err != ESP_OK)
+        logger.printfln("cm_networking: Couldn't remove hostname from cache: error %i", err);
+}
+
 static const uint8_t cm_command_packet_length_versions[] = {
     sizeof(struct cm_packet_header),
     sizeof(struct cm_packet_header) + sizeof(struct cm_command_v1),
 };
-static_assert(ARRAY_SIZE(cm_command_packet_length_versions) == (CM_PROTOCOL_VERSION + 1));
+static_assert(ARRAY_SIZE(cm_command_packet_length_versions) == (CM_PROTOCOL_VERSION + 1), "Unexpected amount of command packet length versions.");
 
 static const uint8_t cm_state_packet_length_versions[] = {
     sizeof(struct cm_packet_header),
     sizeof(struct cm_packet_header) + sizeof(struct cm_state_v1),
 };
-static_assert(ARRAY_SIZE(cm_state_packet_length_versions) == (CM_PROTOCOL_VERSION + 1));
+static_assert(ARRAY_SIZE(cm_state_packet_length_versions) == (CM_PROTOCOL_VERSION + 1), "Unexpected amount of state packet length versions.");
 
-String CMNetworking::validate_packet_header(const struct cm_packet_header *header, ssize_t recv_length) const
+String CMNetworking::validate_packet_header(const struct cm_packet_header *header, ssize_t recv_length, const uint8_t packet_length_versions[], const char *packet_type_name) const
 {
     if (recv_length < sizeof(struct cm_packet_header)) {
         return String("Truncated header with ") + recv_length + " bytes.";
@@ -190,48 +196,32 @@ String CMNetworking::validate_packet_header(const struct cm_packet_header *heade
     }
 
     if (header->version < CM_PROTOCOL_VERSION_MIN) {
-        return String("Protocol version ") + header->version + " too old. Need at least version " __XSTRING(CM_PROTOCOL_VERSION_MIN) ".";
+        return String("Protocol version ") + header->version + " too old. Need at least version " MACRO_VALUE_TO_STRING(CM_PROTOCOL_VERSION_MIN) ".";
     }
+
+    if (header->version <= CM_PROTOCOL_VERSION) { // Known protocol version; match against known packet length.
+        if (header->length != packet_length_versions[header->version])
+            return String("Invalid ") + packet_type_name + " packet length for known protocol version " + header->version + ": " + header->length + " bytes.";
+
+    } else { // Newer protocol than known; packet must be at least as long as our newest known version.
+        if (header->length < packet_length_versions[CM_PROTOCOL_VERSION])
+            return String("Invalid ") + packet_type_name + " packet length for protocol version " + header->version + " from the future: " + header->length + " bytes.";
+    }
+
+    if (recv_length < header->length)
+        return String("Received truncated ") + packet_type_name + " packet for protocol version " + header->version + ": " + recv_length + '/' + header->length + " bytes.";
 
     return String();
 }
 
 String CMNetworking::validate_command_packet_header(const struct cm_command_packet *pkt, ssize_t recv_length) const
 {
-    String err = validate_packet_header(&(pkt->header), recv_length);
-    if (err != "")
-        return err;
-
-    if (((pkt->header.version > CM_PROTOCOL_VERSION) && (pkt->header.length < cm_command_packet_length_versions[CM_PROTOCOL_VERSION]))  // Newer protocol than known. Packet must be at least as long as our newest known version.
-        || (pkt->header.length != cm_command_packet_length_versions[pkt->header.version])) {                                            // Match length of known protocol version.
-        return String("Invalid packet length for protocol version ") + pkt->header.version + ": " + pkt->header.length + " bytes.";
-    }
-
-    if (((pkt->header.version > CM_PROTOCOL_VERSION) && (recv_length < cm_command_packet_length_versions[CM_PROTOCOL_VERSION])) // Newer protocol than known. Packet must be at least as long as our newest known version.
-        || (recv_length != cm_command_packet_length_versions[pkt->header.version])) {                                           // Match length of known protocol version.
-        return String("Received truncated packet for protocol version ") + pkt->header.version + ": " + recv_length + " bytes.";
-    }
-
-    return String();
+    return validate_packet_header(&(pkt->header), recv_length, cm_command_packet_length_versions, "command");
 }
 
 String CMNetworking::validate_state_packet_header(const struct cm_state_packet *pkt, ssize_t recv_length) const
 {
-    String err = validate_packet_header(&(pkt->header), recv_length);
-    if (err != "")
-        return err;
-
-    if (((pkt->header.version > CM_PROTOCOL_VERSION) && (pkt->header.length < cm_state_packet_length_versions[CM_PROTOCOL_VERSION]))    // Newer protocol than known. Packet must be at least as long as our newest known version.
-        || (pkt->header.length != cm_state_packet_length_versions[pkt->header.version])) {                                              // Match length of known protocol version.
-        return String("Invalid packet length for protocol version ") + pkt->header.version + ": " + pkt->header.length + " bytes.";
-    }
-
-    if (((pkt->header.version > CM_PROTOCOL_VERSION) && (recv_length < cm_state_packet_length_versions[CM_PROTOCOL_VERSION]))    // Newer protocol than known. Packet must be at least as long as our newest known version.
-        || (recv_length != cm_state_packet_length_versions[pkt->header.version])) {                                              // Match length of known protocol version.
-        return String("Received truncated packet for protocol version ") + pkt->header.version + ": " + recv_length + " bytes.";
-    }
-
-    return String();
+    return validate_packet_header(&(pkt->header), recv_length, cm_state_packet_length_versions, "state");
 }
 
 bool CMNetworking::seq_num_invalid(uint16_t received_sn, uint16_t last_seen_sn) const
@@ -241,17 +231,7 @@ bool CMNetworking::seq_num_invalid(uint16_t received_sn, uint16_t last_seen_sn) 
 
 void CMNetworking::register_manager(std::vector<String> &&hosts,
                                     const std::vector<String> &names,
-                                    std::function<void(uint8_t,  // client_id
-                                                       uint8_t,  // iec61851_state
-                                                       uint8_t,  // charger_state
-                                                       uint8_t,  // error_state
-                                                       uint32_t, // uptime
-                                                       uint32_t, // charging_time
-                                                       uint16_t, // allowed_charging_current
-                                                       uint16_t, // supported_current
-                                                       bool,     // cp_disconnect_supported
-                                                       bool      // cp_disconnected_state
-                                                       )> manager_callback,
+                                    std::function<void(uint8_t /* client_id */, cm_state_v1 *)> manager_callback,
                                     std::function<void(uint8_t, uint8_t)> manager_error_callback)
 {
     hostnames = hosts;
@@ -280,71 +260,69 @@ void CMNetworking::register_manager(std::vector<String> &&hosts,
         struct sockaddr_in source_addr;
         socklen_t socklen = sizeof(source_addr);
 
-        int len = recvfrom(manager_sock, &state_pkt, sizeof(state_pkt), 0, (sockaddr *)&source_addr, &socklen);
+        // Try to receive up to four packets in one go to catch up on any backlog.
+        // Retrieving one packet every 100+ms is not enough with 10 chargers configured.
+        // Also, chargers might sync up and send their status packets bunched up.
+        // Retrieve them quickly to free up the RX buffer.
+        // Don't process more than four packets in one go, to avoid stalling other tasks for too long.
+        for (int poll_ctr = 0; poll_ctr < 4; ++poll_ctr) {
+            int len = recvfrom(manager_sock, &state_pkt, sizeof(state_pkt), 0, (sockaddr *)&source_addr, &socklen);
 
-        if (len < 0) {
-            if (errno != EAGAIN && errno != EWOULDBLOCK)
-                logger.printfln("recvfrom failed: errno %d", errno);
-            return;
-        }
-
-        int charger_idx = -1;
-        for(int i = 0; i < names.size(); ++i)
-            if (source_addr.sin_family == dest_addrs[i].sin_family &&
-                source_addr.sin_port == dest_addrs[i].sin_port &&
-                source_addr.sin_addr.s_addr == dest_addrs[i].sin_addr.s_addr) {
-                charger_idx = i;
-                break;
+            if (len < 0) {
+                if (errno != EAGAIN && errno != EWOULDBLOCK)
+                    logger.printfln("recvfrom failed: errno %d", errno);
+                return;
             }
 
-        // Don't log in the first 20 seconds after startup: We are probably still resolving hostnames.
-        if (charger_idx == -1) {
-            if (deadline_elapsed(20000))
-                logger.printfln("Received packet from unknown %s. Is the config complete?", inet_ntoa(source_addr.sin_addr));
-            return;
+            int charger_idx = -1;
+            for(int idx = 0; idx < names.size(); ++idx)
+                if (source_addr.sin_family == dest_addrs[idx].sin_family &&
+                    source_addr.sin_port == dest_addrs[idx].sin_port &&
+                    source_addr.sin_addr.s_addr == dest_addrs[idx].sin_addr.s_addr) {
+                        charger_idx = idx;
+                        break;
+                }
+
+            // Don't log in the first 20 seconds after startup: We are probably still resolving hostnames.
+            if (charger_idx == -1) {
+                if (deadline_elapsed(20000))
+                    logger.printfln("Received packet from unknown %s. Is the config complete?", inet_ntoa(source_addr.sin_addr));
+                return;
+            }
+
+            String validation_error = validate_state_packet_header(&state_pkt, len);
+            if (validation_error != "") {
+                logger.printfln("Received state packet from %s (%s) (%i bytes) failed validation: %s",
+                                names[charger_idx].c_str(),
+                                inet_ntoa(source_addr.sin_addr),
+                                len,
+                                validation_error.c_str());
+                manager_error_callback(charger_idx, CM_NETWORKING_ERROR_INVALID_HEADER);
+                return;
+            }
+
+            if (seq_num_invalid(state_pkt.header.seq_num, last_seen_seq_num[charger_idx])) {
+                logger.printfln("Received stale (out of order?) state packet from %s (%s). Last seen seq_num is %u, Received seq_num is %u",
+                                names[charger_idx].c_str(),
+                                inet_ntoa(source_addr.sin_addr),
+                                last_seen_seq_num[charger_idx],
+                                state_pkt.header.seq_num);
+                return;
+            }
+
+            last_seen_seq_num[charger_idx] = state_pkt.header.seq_num;
+
+            if (!CM_STATE_FLAGS_MANAGED_IS_SET(state_pkt.v1.state_flags)) {
+                manager_error_callback(charger_idx, CM_NETWORKING_ERROR_NOT_MANAGED);
+                logger.printfln("%s (%s) reports managed is not activated!",
+                    names[charger_idx].c_str(),
+                    inet_ntoa(source_addr.sin_addr));
+                return;
+            }
+
+            manager_callback(charger_idx, &state_pkt.v1);
         }
-
-        String validation_error = validate_state_packet_header(&state_pkt, len);
-        if (validation_error != "") {
-            logger.printfln("Received state packet from %s (%s) (%i bytes) failed validation: %s",
-                names[charger_idx].c_str(),
-                inet_ntoa(source_addr.sin_addr),
-                len,
-                validation_error.c_str());
-            manager_error_callback(charger_idx, CM_NETWORKING_ERROR_INVALID_HEADER);
-            return;
-        }
-
-        if (seq_num_invalid(state_pkt.header.seq_num, last_seen_seq_num[charger_idx])) {
-            logger.printfln("Received stale (out of order?) state packet from %s (%s). Last seen seq_num is %u, Received seq_num is %u",
-                names[charger_idx].c_str(),
-                inet_ntoa(source_addr.sin_addr),
-                last_seen_seq_num[charger_idx],
-                state_pkt.header.seq_num);
-            return;
-        }
-
-        last_seen_seq_num[charger_idx] = state_pkt.header.seq_num;
-
-        if (!CM_STATE_FLAGS_MANAGED_IS_SET(state_pkt.v1.state_flags)) {
-            manager_error_callback(charger_idx, CM_NETWORKING_ERROR_NOT_MANAGED);
-            logger.printfln("%s (%s) reports managed is not activated!",
-                names[charger_idx].c_str(),
-                inet_ntoa(source_addr.sin_addr));
-            return;
-        }
-
-        manager_callback(charger_idx,
-                         state_pkt.v1.iec61851_state,
-                         state_pkt.v1.charger_state,
-                         state_pkt.v1.error_state,
-                         state_pkt.v1.evse_uptime,
-                         state_pkt.v1.charging_time,
-                         state_pkt.v1.allowed_charging_current,
-                         state_pkt.v1.supported_current,
-                         CM_FEATURE_FLAGS_CP_DISCONNECT_IS_SET(state_pkt.v1.feature_flags),
-                         CM_STATE_FLAGS_CP_DISCONNECTED_IS_SET(state_pkt.v1.state_flags));
-        }, 100, 100);
+    }, 100, 100);
 }
 
 bool CMNetworking::send_manager_update(uint8_t client_id, uint16_t allocated_current, bool cp_disconnect_requested)
@@ -436,6 +414,14 @@ void CMNetworking::register_client(std::function<void(uint16_t, bool)> client_ca
 
         last_seen_seq_num = command_pkt.header.seq_num;
 
+        if (manager_addr_valid && memcmp(&manager_addr, &temp_addr, manager_addr.s2_len) != 0) {
+            char manager_str[16];
+            char temp_str[16];
+            inet_ntoa_r(((struct sockaddr_in*)&manager_addr)->sin_addr, manager_str, sizeof(manager_str));
+            inet_ntoa_r(((struct sockaddr_in*)&temp_addr   )->sin_addr, temp_str,    sizeof(temp_str   ));
+            logger.printfln("cm_networking: Warning: Manager address changed from %s to %s.", manager_str, temp_str);
+        }
+
         last_successful_recv = millis();
         manager_addr = temp_addr;
         manager_addr_valid = true;
@@ -445,7 +431,8 @@ void CMNetworking::register_client(std::function<void(uint16_t, bool)> client_ca
     }, 100, 100);
 }
 
-bool CMNetworking::send_client_update(uint8_t iec61851_state,
+bool CMNetworking::send_client_update(uint32_t esp32_uid,
+                                      uint8_t iec61851_state,
                                       uint8_t charger_state,
                                       uint8_t error_state,
                                       uint32_t uptime,
@@ -483,6 +470,7 @@ bool CMNetworking::send_client_update(uint8_t iec61851_state,
         | has_meter                                 << CM_FEATURE_FLAGS_METER_BIT_POS
         | api.hasFeature("button_configuration")    << CM_FEATURE_FLAGS_BUTTON_CONFIGURATION_BIT_POS;
 
+    state_pkt.v1.esp32_uid = esp32_uid;
     state_pkt.v1.evse_uptime = uptime;
     state_pkt.v1.charging_time = charging_time;
     state_pkt.v1.allowed_charging_current = allowed_charging_current;
@@ -522,9 +510,11 @@ bool CMNetworking::send_client_update(uint8_t iec61851_state,
 
     if (has_meter) {
         auto meter_values = api.getState("meter/values");
+        state_pkt.v1.power_total = meter_values->get("power")->asFloat();
         state_pkt.v1.energy_rel = meter_values->get("energy_rel")->asFloat();
         state_pkt.v1.energy_abs = meter_values->get("energy_abs")->asFloat();
     } else {
+        state_pkt.v1.power_total = 0;
         state_pkt.v1.energy_rel = 0;
         state_pkt.v1.energy_abs = 0;
     }
@@ -543,12 +533,12 @@ bool CMNetworking::send_client_update(uint8_t iec61851_state,
     return true;
 }
 
-bool CMNetworking::check_results()
+void CMNetworking::check_results()
 {
     {
         std::lock_guard<std::mutex> lock{scan_results_mutex};
         if (!mdns_query_async_get_results(scan, 0, &scan_results))
-            return false; // This should never happen as check_results is only called if we are notified the search has finished.
+            return; // This should never happen as check_results is only called if we are notified the search has finished.
     }
 
     mdns_query_async_delete(scan);
@@ -558,8 +548,20 @@ bool CMNetworking::check_results()
 #if MODULE_WS_AVAILABLE()
     String s = get_scan_results();
     ws.pushRawStateUpdate(s, "charge_manager/scan_result");
+#else
+    {
+        std::lock_guard<std::mutex> lock{scan_results_mutex};
+        if (scan_results == nullptr)
+            return;
+
+        while (scan_results != nullptr) {
+            if (this->mdns_result_is_charger(scan_results, nullptr, nullptr, nullptr))
+                this->resolve_via_mdns(scan_results);
+            scan_results = scan_results->next;
+        }
+    }
 #endif
-    return true;
+    return;
 }
 
 void CMNetworking::start_scan()
@@ -582,36 +584,77 @@ void CMNetworking::start_scan()
     });
 }
 
-void CMNetworking::add_scan_result_entry(mdns_result_t *entry, TFJsonSerializer &json)
-{
-    const char *version = "0";
-    const char *enabled = "false";
-    const char *display_name = "[no_display_name]";
+bool CMNetworking::mdns_result_is_charger(mdns_result_t *entry, const char ** ret_version, const char **ret_enabled, const char **ret_display_name) {
+    if (ret_version != nullptr)
+        *ret_version = "0";
+    if (ret_enabled != nullptr)
+        *ret_enabled = "false";
+    if (ret_display_name != nullptr)
+        *ret_display_name = "[no_display_name]";
 
     if (entry->txt_count < 3)
-        return;
+        return false;
 
     int found = 0;
     for(size_t i = 0; i < entry->txt_count; ++i) {
+        // strcmp is safe here: Keys are always null terminated.
+        // https://github.com/espressif/esp-idf/blob/7eba5f80027e1648775b46f889cb4d9519afc965/components/mdns/mdns.c#L3000-L3011
         if (strcmp(entry->txt[i].key, "enabled") == 0 && entry->txt_value_len[i] > 0) {
-            enabled = entry->txt[i].value;
+            if (ret_enabled != nullptr)
+                *ret_enabled = entry->txt[i].value;
             ++found;
         }
         else if (strcmp(entry->txt[i].key, "display_name") == 0 && entry->txt_value_len[i] > 0) {
-            display_name = entry->txt[i].value;
+            if (ret_display_name != nullptr)
+                *ret_display_name = entry->txt[i].value;
             ++found;
         }
         else if (strcmp(entry->txt[i].key, "version") == 0 && entry->txt_value_len[i] > 0) {
-            version = entry->txt[i].value;
+            if (ret_version != nullptr)
+                *ret_version = entry->txt[i].value;
             ++found;
         }
     }
 
     if (found < 3)
+        return false;
+
+    return true;
+}
+
+void CMNetworking::resolve_via_mdns(mdns_result_t *entry) {
+    if (entry->addr && entry->addr->addr.type == IPADDR_TYPE_V4) {
+        for(size_t i = 0; i < this->hostnames.size(); ++i ){
+            if (!this->hostnames[i].endsWith(".local"))
+                continue;
+
+            String host = this->hostnames[i].substring(0, this->hostnames[i].length() - 6);
+
+            if (host == entry->hostname) {
+                this->dest_addrs[i].sin_addr.s_addr = entry->addr->addr.u_addr.ip4.addr;
+                if (this->resolve_state[i] != RESOLVE_STATE_RESOLVED) {
+                    logger.printfln("Resolved %s to %s (via mDNS scan)", this->hostnames[i].c_str(), ipaddr_ntoa((const ip_addr*)&entry->addr->addr));
+                }
+                this->resolve_state[i] = RESOLVE_STATE_RESOLVED;
+            }
+        }
+    }
+}
+
+void CMNetworking::add_scan_result_entry(mdns_result_t *entry, TFJsonSerializer &json)
+{
+    const char *version;
+    const char *enabled;
+    const char *display_name;
+    if (!this->mdns_result_is_charger(entry, &version, &enabled, &display_name))
         return;
+
+    this->resolve_via_mdns(entry);
 
     uint8_t error = SCAN_RESULT_ERROR_OK;
 
+    // strcmp is safe here: txt values such as enabled are null terminated:
+    // https://github.com/espressif/esp-idf/blob/7eba5f80027e1648775b46f889cb4d9519afc965/components/mdns/mdns.c#L3017-L3023
     if (strcmp(enabled, "true") != 0) {
         error = SCAN_RESULT_ERROR_MANAGEMENT_DISABLED;
     } else {
@@ -619,7 +662,7 @@ void CMNetworking::add_scan_result_entry(mdns_result_t *entry, TFJsonSerializer 
         if (!protocol_version) {
             error = SCAN_RESULT_ERROR_FIRMWARE_MISMATCH;
         } else {
-            if (strncmp(version, __XSTRING(CM_PACKET_MAGIC), protocol_version - version) != 0) {
+            if (strncmp(version, MACRO_VALUE_TO_STRING(CM_PACKET_MAGIC), protocol_version - version) != 0) {
                 error = SCAN_RESULT_ERROR_FIRMWARE_MISMATCH;
             } else {
                 long num_version = strtol(++protocol_version, nullptr, 10);

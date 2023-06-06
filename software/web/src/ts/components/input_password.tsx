@@ -65,6 +65,8 @@ export class InputPassword extends Component<InputPasswordProps, InputPasswordSt
         let invalidFeedback = undefined;
         if ("invalidFeedback" in props)
             invalidFeedback = <div class="invalid-feedback">{props.invalidFeedback}</div>;
+        else if ("required" in props && !props.value)
+            invalidFeedback = <div class="invalid-feedback">{__("component.input_text.required")}</div>;
         else if ("minLength" in props && !("maxLength" in props))
             invalidFeedback = <div class="invalid-feedback">{__("component.input_text.min_only_prefix") + props.minLength.toString() + __("component.input_text.min_only_suffix")}</div>;
         else if (!("minLength" in props) && "maxLength" in props)
@@ -85,7 +87,7 @@ export class InputPassword extends Component<InputPasswordProps, InputPasswordSt
                                                         : (props.placeholder ?? __("component.input_password.unchanged"))}
                         onInput={(e) => {
                             let value: string = (e.target as HTMLInputElement).value;
-                            if ((props.maxLength != undefined && new Blob([(e.target as HTMLInputElement).value]).size < props.maxLength) ||
+                            if ((props.maxLength != undefined && new Blob([(e.target as HTMLInputElement).value]).size <= props.maxLength) ||
                                     props.maxLength == undefined)
                                 props.onValue(value.length > 0 ? value : null);
                             else

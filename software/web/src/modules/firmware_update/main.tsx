@@ -36,7 +36,7 @@ type FirmwareUpdateConfig = API.getType['info/version'];
 export class FirmwareUpdate extends Component<{}, FirmwareUpdateConfig> {
     constructor() {
         super();
-        util.eventTarget.addEventListener('info/version', () => {
+        util.addApiEventListener('info/version', () => {
             let newState = API.get('info/version');
             if (this.state != null && this.state.firmware != null && this.state.firmware != newState.firmware)
                 window.location.reload();
@@ -91,12 +91,12 @@ export class FirmwareUpdate extends Component<{}, FirmwareUpdateConfig> {
     }
 
     render(props: {}, state: Readonly<FirmwareUpdateConfig>) {
-        if (!state)
+        if (!util.render_allowed())
             return (<></>);
 
         // TODO: why not use the charge tracker module here?
         let show_config_reset = false;
-        if (API.get('info/modules')?.hasOwnProperty("users") && (API.get('info/modules') as any).users)
+        if (API.hasModule("users"))
             show_config_reset = true;
 
         return (
@@ -141,7 +141,7 @@ export class FirmwareUpdate extends Component<{}, FirmwareUpdateConfig> {
                 </FormRow>
 
                 <FormRow label={__("firmware_update.content.current_spiffs")}>
-                    <InputText value={state.config}/>
+                    <InputText value={state.config + " (" + state.config_type + ")"}/>
                 </FormRow>
 
                 {show_config_reset ?

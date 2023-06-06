@@ -468,8 +468,8 @@ struct Config {
     }
 
     static Config Str(const String &s,
-                      uint16_t minChars = 0,
-                      uint16_t maxChars = 0);
+                      uint16_t minChars,
+                      uint16_t maxChars);
 
     static Config Float(float d,
                         float min = std::numeric_limits<float>::lowest(),
@@ -518,6 +518,17 @@ struct Config {
             }
 
             explicit operator Config*(){return conf;}
+
+            // Allowing to call begin and end directly on
+            // the wrapper makes it easier to use
+            // range-based for loops.
+            std::vector<Config>::iterator begin() {
+                return conf->begin();
+            }
+
+            std::vector<Config>::iterator end() {
+                return conf->end();
+            }
 
         private:
             Config *conf;
@@ -629,6 +640,24 @@ struct Config {
         return children.size();
     }
 
+    std::vector<Config>::iterator begin() {
+        if (!this->is<Config::ConfArray>()) {
+            logger.printfln("Tried to get count of a node that is not an array!");
+            delay(100);
+            return std::vector<Config>::iterator();
+        }
+        return this->asArray().begin();
+    }
+
+    std::vector<Config>::iterator end() {
+        if (!this->is<Config::ConfArray>()) {
+            logger.printfln("Tried to get count of a node that is not an array!");
+            delay(100);
+            return std::vector<Config>::iterator();
+        }
+        return this->asArray().end();
+    }
+
     template<typename ConfigT>
     ConfigT *get() {
         if (!this->is<ConfigT>()) {
@@ -656,16 +685,33 @@ struct Config {
     const char *asEphemeralCStr() const;
     const char *asUnsafeCStr() const;
 
-    const float &asFloat() const;
+    float asFloat() const;
 
-    const uint32_t &asUint() const;
+    uint32_t asUint() const;
 
-    const int32_t &asInt() const;
+    int32_t asInt() const;
 
-    const bool &asBool() const;
+    template<typename T>
+    T asEnum() const {
+        if (this->is<ConfUint>()) {
+            return (T) this->asUint();
+        } else if (this->is<ConfInt>()) {
+            return (T) this->asInt();
+        } else {
+            logger.printfln("asEnum: Config has wrong type. This is %s, (not a ConfInt or ConfUint)", this->to_string().c_str());
+            delay(100);
+            return (T) this->asUint();
+        }
+    }
 
+    bool asBool() const;
+
+private:
+    // This is a gigantic footgun: The reference is invalidated after the module setup,
+    // because of the ConfSlot array shrinkToFit calls.
     std::vector<Config> &asArray();
 
+public:
     template<typename T, typename ConfigT>
     bool update_value(T value) {
         if (!this->is<ConfigT>()) {
@@ -808,7 +854,7 @@ public:
     // This allows ArduinoJson to deserialize in zero-copy mode
     String update_from_cstr(char *c, size_t payload_len);
 
-    String update_from_json(JsonVariant root);
+    String update_from_json(JsonVariant root, bool force_same_keys);
 
     String update(const Config::ConfUpdate *val);
 

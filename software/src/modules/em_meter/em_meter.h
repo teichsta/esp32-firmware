@@ -21,22 +21,18 @@
 
 #include "config.h"
 
-class EMMeter
+#include "module.h"
+
+class EMMeter final : public IModule
 {
 public:
     EMMeter(){}
-    void pre_setup();
-    void setup();
+    void pre_setup() override;
+    void setup() override;
     void setupEM(bool update_module_initialized);
-    void register_urls();
-    void loop();
+    void register_urls() override;
     void updateMeterValues();
-
-    bool initialized = false;
-    bool hardware_available = false;
 
     ConfigRoot all_values;
     ConfigRoot errors;
-
-    char uid[7] = {0};
 };

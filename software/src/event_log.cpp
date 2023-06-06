@@ -98,8 +98,8 @@ void EventLog::printfln(const char *fmt, va_list args) {
 
     auto written = vsnprintf(buf, buf_size, fmt, args);
     if (written >= buf_size) {
-        write("Next log message was truncated. Bump EventLog::printfln buffer size!", 69);
-        written = buf_size;
+        write("Next log message was truncated. Bump EventLog::printfln buffer size!", 68); // Don't include termination in write request.
+        written = buf_size - 1; // Don't include termination, which vsnprintf always leaves in.
     }
 
     write(buf, written);
@@ -124,12 +124,12 @@ void EventLog::drop(size_t count)
 }
 
 #define CHUNK_SIZE 1024
-char chunk_buf[CHUNK_SIZE] = {0};
 
 void EventLog::register_urls()
 {
     server.on("/event_log", HTTP_GET, [this](WebServerRequest request) {
         std::lock_guard<std::mutex> lock{event_buf_mutex};
+        auto chunk_buf = heap_alloc_array<char>(CHUNK_SIZE);
         auto used = event_buf.used();
 
         request.beginChunkedResponse(200, "text/plain");
@@ -138,10 +138,10 @@ void EventLog::register_urls()
             size_t to_write = MIN(CHUNK_SIZE, used - index);
 
             for (int i = 0; i < to_write; ++i) {
-                event_buf.peek_offset((char *)(chunk_buf + i), index + i);
+                event_buf.peek_offset((char *)(chunk_buf.get() + i), index + i);
             }
 
-            request.sendChunk(chunk_buf, to_write);
+            request.sendChunk(chunk_buf.get(), to_write);
         }
 
         return request.endChunkedResponse();

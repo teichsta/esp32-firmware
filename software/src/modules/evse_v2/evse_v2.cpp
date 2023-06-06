@@ -28,6 +28,7 @@
 #include "web_server.h"
 #include "modules.h"
 
+extern uint32_t local_uid_num;
 extern bool firmware_update_allowed;
 
 #define SLOT_ACTIVE(x) ((bool)(x & 0x01))
@@ -249,6 +250,12 @@ void EVSEV2::pre_setup()
     });
 
     evse_control_pilot_disconnect_update = evse_control_pilot_disconnect;
+
+    evse_require_meter_enabled = Config::Object({
+        {"enabled", Config::Bool(false)}
+    });
+
+    evse_require_meter_enabled_update = evse_require_meter_enabled;
 }
 
 bool EVSEV2::apply_slot_default(uint8_t slot, uint16_t current, bool enabled, bool clear)
@@ -335,8 +342,27 @@ void EVSEV2::apply_defaults()
         tf_evse_v2_set_charging_slot(&device, CHARGING_SLOT_CHARGE_MANAGER, 0, cm_enabled, true);
 
     // Slot 8 (external) is controlled via API, no need to change anything here
+
+    // Disabling all unused charging slots.
+    for (int i = CHARGING_SLOT_COUNT; i < CHARGING_SLOT_COUNT_SUPPORTED_BY_EVSE; i++) {
+        bool active;
+        is_in_bootloader(tf_evse_v2_get_charging_slot_default(&device, i, NULL, &active, NULL));
+        if (active)
+            is_in_bootloader(tf_evse_v2_set_charging_slot_default(&device, i, 32000, false, false));
+        is_in_bootloader(tf_evse_v2_set_charging_slot_active(&device, i, false));
+    }
 }
 
+void EVSEV2::set_charge_limits_slot(uint16_t current, bool enabled)
+{
+    is_in_bootloader(tf_evse_v2_set_charging_slot(&device, CHARGING_SLOT_CHARGE_LIMITS, current, enabled, false));
+}
+/*
+void EVSEV2::set_charge_time_restriction_slot(uint16_t current, bool enabled)
+{
+    is_in_bootloader(tf_evse_v2_set_charging_slot(&device, CHARGING_SLOT_TIME_RESTRICTION, current, enabled, true));
+}
+*/
 void EVSEV2::factory_reset()
 {
     tf_evse_v2_factory_reset(&device, 0x2342FACD);
@@ -369,6 +395,32 @@ void EVSEV2::set_indicator_led(int16_t indication, uint16_t duration, uint8_t *r
     tf_evse_v2_set_indicator_led(&device, indication, duration, ret_status);
 }
 
+void EVSEV2::set_require_meter_blocking(bool blocking) {
+    is_in_bootloader(tf_evse_v2_set_charging_slot_max_current(&device, CHARGING_SLOT_REQUIRE_METER, blocking ? 0 : 32000));
+}
+
+void EVSEV2::set_require_meter_enabled(bool enabled) {
+    if (!initialized)
+        return;
+
+    apply_slot_default(CHARGING_SLOT_REQUIRE_METER, 0, enabled, false);
+    is_in_bootloader(tf_evse_v2_set_charging_slot_active(&device, CHARGING_SLOT_REQUIRE_METER, enabled));
+}
+
+bool EVSEV2::get_require_meter_blocking() {
+    uint16_t current = 0;
+    bool enabled = get_require_meter_enabled();
+    if (!enabled)
+        return false;
+
+    is_in_bootloader(tf_evse_v2_get_charging_slot(&device, CHARGING_SLOT_REQUIRE_METER, &current, &enabled, nullptr));
+    return enabled && current == 0;
+}
+
+bool EVSEV2::get_require_meter_enabled() {
+    return evse_require_meter_enabled.get("enabled")->asBool();
+}
+
 void EVSEV2::setup()
 {
     setup_evse();
@@ -391,6 +443,28 @@ void EVSEV2::setup()
     task_scheduler.scheduleWithFixedDelay([this](){
         update_all_data();
     }, 0, 250);
+
+    // The EVSE tests the DC fault protector
+    // - on boot-up
+    // - whenever a car is disconnected
+    // - once every 24 hours
+    // As the EVSE does not know the current time, we attempt to trigger a test
+    // somewhere between 3 am and 4 am. DST shifts typically happen earlier.
+    // Manually triggering a test resets the 24 hour counter, so that the
+    // EVSE is now roughly synchronized and tests should typically not be
+    // observable by the user.
+    task_scheduler.scheduleWithFixedDelay([this]() {
+        struct timeval tv;
+        if (!clock_synced(&tv))
+            return;
+
+        struct tm timeinfo;
+        localtime_r(&tv.tv_sec, &timeinfo);
+
+        if (timeinfo.tm_hour == 3) {
+            tf_evse_v2_trigger_dc_fault_test(&device, 0xDCFAE550, nullptr);
+        }
+    }, 60 * 1000 /* wait for ntp sync */, 60 * 60 * 1000);
 }
 
 String EVSEV2::get_evse_debug_header()
@@ -684,10 +758,21 @@ uint16_t EVSEV2::get_ocpp_current()
     return evse_slots.get(CHARGING_SLOT_OCPP)->get("max_current")->asUint();
 }
 
+void EVSEV2::check_debug()
+{
+    task_scheduler.scheduleOnce([this](){
+        if (deadline_elapsed(last_debug_check + 60000) && debug == true)
+        {
+            logger.printfln("Debug log creation canceled because no continue call was received for more than 60 seconds.");
+            debug = false;
+        }
+        else if (debug == true)
+            check_debug();
+    }, 70000);
+}
+
 void EVSEV2::register_urls()
 {
-    if (!device_found)
-        return;
 
 #if MODULE_CM_NETWORKING_AVAILABLE()
     cm_networking.register_client([this](uint16_t current, bool cp_disconnect_requested) {
@@ -707,6 +792,7 @@ void EVSEV2::register_urls()
         }
 
         cm_networking.send_client_update(
+            local_uid_num,
             evse_state.get("iec61851_state")->asUint(),
             evse_state.get("charger_state")->asUint(),
             evse_state.get("error_state")->asUint(),
@@ -758,12 +844,31 @@ void EVSEV2::register_urls()
             is_in_bootloader(tf_evse_v2_set_charging_slot_max_current(&device, CHARGING_SLOT_AUTOSTART_BUTTON, 32000));
     }, true);
 
+    api.addCommand("evse/trigger_dc_fault_test", Config::Null(), {}, [this](){
+        if (evse_state.get("iec61851_state")->asUint() != IEC_STATE_A) {
+            logger.printfln("Can't trigger DC fault test: IEC state is not A.");
+            return;
+        }
+        bool success = false;
+        int rc = tf_evse_v2_trigger_dc_fault_test(&device, 0xDCFAE550, &success);
+        if (!success) {
+            logger.printfln("Failed to start DC fault test. rc %d", rc);
+        }
+    }, true);
+
 #if MODULE_WS_AVAILABLE()
     server.on("/evse/start_debug", HTTP_GET, [this](WebServerRequest request) {
         task_scheduler.scheduleOnce([this](){
+            last_debug_check = millis();
+            check_debug();
             ws.pushRawStateUpdate(this->get_evse_debug_header(), "evse/debug_header");
             debug = true;
         }, 0);
+        return request.send(200);
+    });
+
+    server.on("/evse/continue_debug", HTTP_GET, [this](WebServerRequest request) {
+        last_debug_check = millis();
         return request.send(200);
     });
 
@@ -1209,16 +1314,19 @@ void EVSEV2::update_all_data()
     evse_auto_start_charging.get("auto_start_charging")->updateBool(
         !evse_slots.get(CHARGING_SLOT_AUTOSTART_BUTTON)->get("clear_on_disconnect")->asBool());
 
-    // get_energy_meter_values
-    evse_energy_meter_values.get("power")->updateFloat(power);
-    evse_energy_meter_values.get("energy_rel")->updateFloat(energy_relative);
-    evse_energy_meter_values.get("energy_abs")->updateFloat(energy_absolute);
 
-    for (int i = 0; i < 3; ++i)
-        evse_energy_meter_values.get("phases_active")->get(i)->updateBool(phases_active[i]);
+    if (energy_meter_type != 0) {
+        // get_energy_meter_values
+        evse_energy_meter_values.get("power")->updateFloat(power);
+        evse_energy_meter_values.get("energy_rel")->updateFloat(energy_relative);
+        evse_energy_meter_values.get("energy_abs")->updateFloat(energy_absolute);
 
-    for (int i = 0; i < 3; ++i)
-        evse_energy_meter_values.get("phases_connected")->get(i)->updateBool(phases_connected[i]);
+        for (int i = 0; i < 3; ++i)
+            evse_energy_meter_values.get("phases_active")->get(i)->updateBool(phases_active[i]);
+
+        for (int i = 0; i < 3; ++i)
+            evse_energy_meter_values.get("phases_connected")->get(i)->updateBool(phases_connected[i]);
+    }
 
     // get_energy_meter_errors
     evse_energy_meter_errors.get("local_timeout")->updateUint(error_count[0]);
@@ -1270,8 +1378,10 @@ void EVSEV2::update_all_data()
     evse_external_defaults.get("current")->updateUint(external_default_current);
     evse_external_defaults.get("clear_on_disconnect")->updateBool(external_default_clear_on_disconnect);
 
+    evse_require_meter_enabled.get("enabled")->updateBool(SLOT_ACTIVE(active_and_clear_on_disconnect[CHARGING_SLOT_REQUIRE_METER]));
+
 #if MODULE_WATCHDOG_AVAILABLE()
-    static size_t watchdog_handle = watchdog.add("evse_v2_all_data", "EVSE not reachable", 10 * 60 * 1000);
+    static size_t watchdog_handle = watchdog.add("evse_v2_all_data", "EVSE not reachable");
     watchdog.reset(watchdog_handle);
 #endif
 }

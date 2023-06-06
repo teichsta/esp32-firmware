@@ -32,6 +32,7 @@ import { FormGroup } from "../../ts/components/form_group";
 import { InputText } from "../../ts/components/input_text";
 import { Button, Card, ListGroup, ListGroupItem, Modal } from "react-bootstrap";
 import { InputSelect } from "src/ts/components/input_select";
+import { ItemModal } from "src/ts/components/item_modal";
 
 const MAX_AUTHORIZED_TAGS = 16;
 
@@ -54,14 +55,14 @@ export class Nfc extends ConfigComponent<'nfc/config', {}, NfcState> {
               __("nfc.script.save_failed"),
               __("nfc.script.reboot_content_changed"));
 
-        util.eventTarget.addEventListener('users/config', () => {
+        util.addApiEventListener('users/config', () => {
             this.setState({userCfg: API.get('users/config')});
         });
 
-        util.eventTarget.addEventListener('nfc/seen_tags', () => {
+        util.addApiEventListener('nfc/seen_tags', () => {
             this.setState({seen_tags: API.get('nfc/seen_tags')});
         });
-        
+
         this.state = {
             newTag: {
                 tag_id: "",
@@ -81,8 +82,8 @@ export class Nfc extends ConfigComponent<'nfc/config', {}, NfcState> {
     }
 
     render(props: {}, state: NfcConfig & NfcState) {
-        if (!state || !state.seen_tags)
-            return (<></>);
+        if (!util.render_allowed() || !API.hasFeature("nfc"))
+            return <></>
 
         type NFCSeenTag = API.getType['nfc/seen_tags'][0];
 
@@ -187,11 +188,23 @@ export class Nfc extends ConfigComponent<'nfc/config', {}, NfcState> {
                     </FormRow>
                 </ConfigForm>
 
-                <Modal show={state.showModal} onHide={() => this.setState({showModal: false})} centered>
-                    <Modal.Header closeButton>
-                        <label class="modal-title form-label">{__("nfc.content.add_tag_modal_title")}</label>
-                    </Modal.Header>
-                    <Modal.Body>
+                <ItemModal show={state.showModal}
+                    onHide={() => this.setState({showModal: false})}
+                    onSubmit={() => {
+                        if (state.newTag.tag_id === "" && unauth_seen_tags.length == 1)
+                        {
+                            state.newTag.tag_id = unauth_seen_tags[0].tag_id;
+                            state.newTag.tag_type = unauth_seen_tags[0].tag_type;
+                        }
+                        this.setState({showModal: false,
+                                       authorized_tags: state.authorized_tags.concat(state.newTag),
+                                       newTag: {tag_id: "", user_id: 0, tag_type: "disabled" as any}});
+                        this.hackToAllowSave();}}
+                    title={__("nfc.content.add_tag_modal_title")}
+                    no_text={__("nfc.content.add_tag_modal_abort")}
+                    no_variant={"secondary"}
+                    yes_text={__("nfc.content.add_tag_modal_save")}
+                    yes_variant={"primary"}>
                         <FormGroup label={__("nfc.content.add_tag_modal_user_id")}>
                             <InputSelect items={state.userCfg.users.map((u, j) => [u.id.toString(), j == 0 ? __("nfc.script.not_assigned") : u.display_name.toString()])}
                                          value={state.newTag.user_id.toString()}
@@ -235,26 +248,7 @@ export class Nfc extends ConfigComponent<'nfc/config', {}, NfcState> {
                                 required
                                 />
                         </FormGroup>
-                    </Modal.Body>
-                    <Modal.Footer>
-                        <Button variant="secondary" onClick={() => this.setState({showModal: false})}>
-                            {__("nfc.content.add_tag_modal_abort")}
-                        </Button>
-                        <Button variant="primary"
-                                onClick={() => {
-                                                if (state.newTag.tag_id === "" && unauth_seen_tags.length == 1)
-                                                {
-                                                    state.newTag.tag_id = unauth_seen_tags[0].tag_id;
-                                                    state.newTag.tag_type = unauth_seen_tags[0].tag_type;
-                                                }
-                                                this.setState({showModal: false,
-                                                               authorized_tags: state.authorized_tags.concat(state.newTag),
-                                                               newTag: {tag_id: "", user_id: 0, tag_type: "disabled" as any}});
-                                                this.hackToAllowSave();}}>
-                            {__("nfc.content.add_tag_modal_save")}
-                        </Button>
-                    </Modal.Footer>
-                </Modal>
+                </ItemModal>
             </>
         )
     }

@@ -48,19 +48,19 @@ export class Proxy extends ConfigComponent<'proxy/config', {}, ProxyState> {
             __("proxy.script.save_failed"),
             __("proxy.script.reboot_content_changed"));
 
-        util.eventTarget.addEventListener('proxy/devices', () => {
+        util.addApiEventListener('proxy/devices', () => {
             this.setState({devices: API.get('proxy/devices')});
         });
 
-        util.eventTarget.addEventListener('proxy/error_counters', () => {
+        util.addApiEventListener('proxy/error_counters', () => {
             this.setState({error_counters: API.get('proxy/error_counters')});
         });
 
     }
 
     render(props: {}, state: Readonly<API.getType['proxy/config'] & ProxyState>) {
-        if (!state || !state.devices)
-            return (<></>);
+        if (!util.render_allowed())
+            return <></>
 
         return (
             <>
@@ -85,7 +85,7 @@ export class Proxy extends ConfigComponent<'proxy/config', {}, ProxyState> {
                     <FormRow label={__("proxy.content.listen_port")} label_muted={__("proxy.content.listen_port_muted")}>
                         <InputNumber required
                                      min={1}
-                                     max={65536}
+                                     max={65535}
                                      value={state.listen_port}
                                      onValue={this.set("listen_port")}/>
                     </FormRow>

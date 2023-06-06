@@ -21,18 +21,17 @@
 
 #include "config.h"
 
-class DeviceName
+#include "module.h"
+
+class DeviceName final : public IModule
 {
 public:
     DeviceName(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
 
     void updateDisplayType();
-
-    bool initialized = false;
 
     ConfigRoot name;
     ConfigRoot display_name;

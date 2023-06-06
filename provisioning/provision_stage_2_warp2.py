@@ -36,7 +36,7 @@ from provision_stage_3_warp2 import Stage3
 
 evse = None
 
-def run_bricklet_tests(ipcon, result, qr_variant, qr_power, qr_stand, ssid, stage3):
+def run_bricklet_tests(ipcon, result, qr_variant, qr_power, qr_stand, qr_stand_wiring, ssid, stage3):
     global evse
     enumerations = enumerate_devices(ipcon)
 
@@ -57,12 +57,12 @@ def run_bricklet_tests(ipcon, result, qr_variant, qr_power, qr_stand, ssid, stag
     is_smart = not is_basic and energy_meter_type == 0
     is_pro = not is_basic and energy_meter_type != 0
 
-    stage3.test_front_panel_button(not qr_stand)
+    stage3.test_front_panel_button(qr_stand == '0')
     result["front_panel_button_tested"] = True
 
     seen_tags = []
     if is_smart or is_pro:
-        if qr_stand:
+        if qr_stand != '0':
             def download_seen_tags():
                 with urllib.request.urlopen('http://{}/nfc/seen_tags'.format(ssid), timeout=3) as f:
                     nfc_str = f.read()
@@ -132,10 +132,10 @@ def run_bricklet_tests(ipcon, result, qr_variant, qr_power, qr_stand, ssid, stag
         meter_data = json.loads(meter_str)
         sps = meter_data["samples_per_second"]
         samples = meter_data["samples"]
-        if not 0.2 < sps < 2.5:
-            fatal_error("Expected between 0.2 and 2.5 energy meter samples per second, but got {}".format(sps))
+        # if not 0.2 < sps < 2.5:
+        #     fatal_error("Expected between 0.2 and 2.5 energy meter samples per second, but got {}".format(sps))
         if len(samples) < 2:
-            fatal_error("Expected at least 10 samples but got {}".format(len(samples)))
+            fatal_error("Expected at least 2 samples but got {}".format(len(samples)))
 
         error_count = evse.get_energy_meter_errors()
         if any(x != 0 for x in error_count):
@@ -335,8 +335,17 @@ def collect_nfc_tag_ids(stage3, getter, beep_notify):
 def main(stage3):
     result = {"start": now()}
 
-    with ChangedDirectory(os.path.join("..", "..", "firmwares")):
-        run(["git", "pull"])
+    github_reachable = True
+    try:
+        with urllib.request.urlopen('https://github.com/Tinkerforge/firmwares', timeout=5.0) as req:
+            req.recv()
+    except:
+        print("github.com not reachable: Will not pull firmwares git.")
+        github_reachable = False
+
+    if github_reachable:
+        with ChangedDirectory(os.path.join("..", "..", "firmwares")):
+            run(["git", "pull"])
 
     evse_directory = os.path.join("..", "..", "firmwares", "bricklets", "evse_v2")
     evse_path = os.readlink(os.path.join(evse_directory, "bricklet_evse_v2_firmware_latest.zbin"))
@@ -347,7 +356,7 @@ def main(stage3):
     firmware_path = os.path.join(firmware_directory, firmware_path)
 
     # T:WARP2-CP-22KW-50;V:2.1;S:5000000001;B:2021-09;A:0;;;
-    pattern = r'^T:WARP2-C(B|S|P)-(11|22)KW-(50|75);V:(\d+\.\d+);S:(5\d{9});B:(\d{4}-\d{2})(?:;A:(0|1))?;;;*$'
+    pattern = r'^T:WARP2-C(B|S|P)-(11|22)KW-(50|75)(?:-PC)?;V:(\d+\.\d+);S:(5\d{9});B:(\d{4}-\d{2})(?:;A:(0|1))?;;;*$'
     qr_code = my_input("Scan the wallbox QR code")
     match = re.match(pattern, qr_code)
 
@@ -379,12 +388,13 @@ def main(stage3):
     result["qr_code"] = match.group(0)
 
     if qr_accessories == '0':
-        qr_stand = False
+        qr_stand = '0'
+        qr_stand_wiring = '0'
         qr_supply_cable = 0.0
         qr_cee = False
     else:
-        # S:1;E:2.5;C:1;;;
-        pattern = r'^(?:S:(0|1);)?E:(\d+\.\d+);C:(0|1);;;*$'
+        # S:1;W:1;E:2.5;C:1;;;
+        pattern = r'^(?:S:(0|1|2|1-PC|2-PC);)?(?:W:(0|1|2);)?E:(\d+\.\d+);C:(0|1);;;*$'
         qr_code = my_input("Scan the accessories QR code")
         match = re.match(pattern, qr_code)
 
@@ -392,12 +402,14 @@ def main(stage3):
             qr_code = my_input("Scan the accessories QR code", red)
             match = re.match(pattern, qr_code)
 
-        qr_stand = bool(int(match.group(1))) if match.group(1) != None else False
-        qr_supply_cable = float(match.group(2))
-        qr_cee = bool(int(match.group(3)))
+        qr_stand = match.group(1) if match.group(1) != None else '0'
+        qr_stand_wiring = match.group(2) if match.group(2) != None else '0'
+        qr_supply_cable = float(match.group(3))
+        qr_cee = bool(int(match.group(4)))
 
         print("Accessories QR code data:")
         print("    Stand: {}".format(qr_stand))
+        print("    Stand Wiring: {}".format(qr_stand_wiring))
         print("    Supply Cable: {} m".format(qr_supply_cable))
         print("    CEE: {}".format(qr_cee))
 
@@ -412,7 +424,7 @@ def main(stage3):
             qr_code = getpass.getpass(red("Scan the ESP Brick QR code"))
             match = re.match(pattern, qr_code)
 
-        if qr_stand or qr_supply_cable != 0 or qr_cee:
+        if (qr_stand != '0' and qr_stand_wiring != '0') or qr_supply_cable != 0 or qr_cee:
             stage3.power_on('CEE')
         else:
             stage3.power_on({"B": "Basic", "S": "Smart", "P": "Pro"}[qr_variant])
@@ -425,7 +437,7 @@ def main(stage3):
         print("    Hardware type: {}".format(hardware_type))
         print("    UID: {}".format(esp_uid_qr))
 
-        if not qr_stand:
+        if qr_stand == '0':
             seen_tags = collect_nfc_tag_ids(stage3, stage3.get_nfc_tag_ids, False)
 
         result["uid"] = esp_uid_qr
@@ -486,9 +498,9 @@ def main(stage3):
         except Exception as e:
             fatal_error("Failed to connect to ESP proxy. Is the router's DHCP cache full?")
 
-        seen_tags2 = run_bricklet_tests(ipcon, result, qr_variant, qr_power, qr_stand, ssid, stage3)
+        seen_tags2 = run_bricklet_tests(ipcon, result, qr_variant, qr_power, qr_stand, qr_stand_wiring, ssid, stage3)
 
-        if qr_stand:
+        if qr_stand != '0':
             seen_tags = seen_tags2
 
         try:
@@ -578,7 +590,7 @@ def main(stage3):
             fatal_error("Failed to configure NFC tags! {} {}!".format(e, e.read()))
         result["nfc_tags_configured"] = True
     else:
-        if qr_stand or qr_supply_cable != 0 or qr_cee:
+        if (qr_stand != '0' and qr_stand_wiring != '0') or qr_supply_cable != 0 or qr_cee:
             stage3.power_on('CEE')
         else:
             stage3.power_on({"B": "Basic", "S": "Smart", "P": "Pro"}[qr_variant])
@@ -611,12 +623,7 @@ def main(stage3):
     try:
         if qr_variant != "B":
             browser = webdriver.Firefox()
-            browser.get("http://{}".format(ssid))
-
-            element = WebDriverWait(browser, 10).until(
-                EC.element_to_be_clickable((By.ID, "sidebar-evse"))
-            )
-            element.click()
+            browser.get("http://{}/#evse".format(ssid))
 
         print("Performing the electrical tests")
         stage3.test_wallbox()

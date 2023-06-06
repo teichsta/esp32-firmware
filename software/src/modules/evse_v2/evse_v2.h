@@ -25,7 +25,7 @@
 #include "device_module.h"
 #include "evse_v2_bricklet_firmware_bin.embedded.h"
 
-#define CHARGING_SLOT_COUNT 12
+#define CHARGING_SLOT_COUNT 14
 #define CHARGING_SLOT_COUNT_SUPPORTED_BY_EVSE 20
 
 #define CHARGING_SLOT_INCOMING_CABLE 0
@@ -40,6 +40,8 @@
 #define CHARGING_SLOT_MODBUS_TCP 9
 #define CHARGING_SLOT_MODBUS_TCP_ENABLE 10
 #define CHARGING_SLOT_OCPP 11
+#define CHARGING_SLOT_CHARGE_LIMITS 12
+#define CHARGING_SLOT_REQUIRE_METER 13
 
 #define IEC_STATE_A 0
 #define IEC_STATE_B 1
@@ -69,10 +71,10 @@ class EVSEV2 : public DeviceModule<TF_EVSEV2,
 {
 public:
     EVSEV2() : DeviceModule("evse", "EVSE 2.0", "EVSE 2.0", std::bind(&EVSEV2::setup_evse, this)) {}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
+    void loop() override;
 
     // Called in evse_v2_meter setup
     void update_all_data();
@@ -87,6 +89,14 @@ public:
     void set_modbus_current(uint16_t current);
     void set_modbus_enabled(bool enabled);
 
+    void set_require_meter_blocking(bool blocking);
+    void set_require_meter_enabled(bool enabled);
+    bool get_require_meter_blocking();
+    bool get_require_meter_enabled();
+
+    void set_charge_limits_slot(uint16_t current, bool enabled);
+    //void set_charge_time_restriction_slot(uint16_t current, bool enabled);
+
     void set_ocpp_current(uint16_t current);
     uint16_t get_ocpp_current();
 
@@ -100,6 +110,8 @@ public:
     void set_data_storage(uint8_t page, const uint8_t *data);
     void get_data_storage(uint8_t page, uint8_t *data);
     void set_indicator_led(int16_t indication, uint16_t duration, uint8_t *ret_status);
+
+    void check_debug();
 
     bool debug = false;
 
@@ -145,7 +157,10 @@ public:
     ConfigRoot evse_boost_mode_update;
     ConfigRoot evse_control_pilot_disconnect;
     ConfigRoot evse_control_pilot_disconnect_update;
+    ConfigRoot evse_require_meter_enabled;
+    ConfigRoot evse_require_meter_enabled_update;
 
     uint32_t last_current_update = 0;
     bool shutdown_logged = false;
+    uint32_t last_debug_check = 0;
 };

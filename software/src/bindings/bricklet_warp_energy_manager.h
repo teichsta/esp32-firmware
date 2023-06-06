@@ -1,5 +1,5 @@
 /* ***********************************************************
- * This file was automatically generated on 2022-12-15.      *
+ * This file was automatically generated on 2023-04-25.      *
  *                                                           *
  * C/C++ for Microcontrollers Bindings Version 2.0.3         *
  *                                                           *
@@ -28,6 +28,14 @@ extern "C" {
 struct TF_WARPEnergyManager;
 #if TF_IMPLEMENT_CALLBACKS != 0
 
+typedef void (*TF_WARPEnergyManager_SDWallboxDataPointsLowLevelHandler)(struct TF_WARPEnergyManager *warp_energy_manager, uint16_t data_length, uint16_t data_chunk_offset, uint8_t data_chunk_data[60], void *user_data);
+typedef void (*TF_WARPEnergyManager_SDWallboxDataPointsHandler)(struct TF_WARPEnergyManager *warp_energy_manager, uint8_t *data, uint16_t data_length, void *user_data);
+typedef void (*TF_WARPEnergyManager_SDWallboxDailyDataPointsLowLevelHandler)(struct TF_WARPEnergyManager *warp_energy_manager, uint16_t data_length, uint16_t data_chunk_offset, uint32_t data_chunk_data[15], void *user_data);
+typedef void (*TF_WARPEnergyManager_SDWallboxDailyDataPointsHandler)(struct TF_WARPEnergyManager *warp_energy_manager, uint32_t *data, uint16_t data_length, void *user_data);
+typedef void (*TF_WARPEnergyManager_SDEnergyManagerDataPointsLowLevelHandler)(struct TF_WARPEnergyManager *warp_energy_manager, uint16_t data_length, uint16_t data_chunk_offset, uint8_t data_chunk_data[58], void *user_data);
+typedef void (*TF_WARPEnergyManager_SDEnergyManagerDataPointsHandler)(struct TF_WARPEnergyManager *warp_energy_manager, uint8_t *data, uint16_t data_length, void *user_data);
+typedef void (*TF_WARPEnergyManager_SDEnergyManagerDailyDataPointsLowLevelHandler)(struct TF_WARPEnergyManager *warp_energy_manager, uint16_t data_length, uint16_t data_chunk_offset, uint32_t data_chunk_data[14], void *user_data);
+typedef void (*TF_WARPEnergyManager_SDEnergyManagerDailyDataPointsHandler)(struct TF_WARPEnergyManager *warp_energy_manager, uint32_t *data, uint16_t data_length, void *user_data);
 
 #endif
 /**
@@ -38,10 +46,33 @@ struct TF_WARPEnergyManager;
 typedef struct TF_WARPEnergyManager {
     TF_TFP *tfp;
 #if TF_IMPLEMENT_CALLBACKS != 0
+    TF_WARPEnergyManager_SDWallboxDataPointsLowLevelHandler sd_wallbox_data_points_low_level_handler;
+    void *sd_wallbox_data_points_low_level_user_data;
+
+    TF_WARPEnergyManager_SDWallboxDailyDataPointsLowLevelHandler sd_wallbox_daily_data_points_low_level_handler;
+    void *sd_wallbox_daily_data_points_low_level_user_data;
+
+    TF_WARPEnergyManager_SDEnergyManagerDataPointsLowLevelHandler sd_energy_manager_data_points_low_level_handler;
+    void *sd_energy_manager_data_points_low_level_user_data;
+
+    TF_WARPEnergyManager_SDEnergyManagerDailyDataPointsLowLevelHandler sd_energy_manager_daily_data_points_low_level_handler;
+    void *sd_energy_manager_daily_data_points_low_level_user_data;
+
+    TF_WARPEnergyManager_SDWallboxDataPointsHandler sd_wallbox_data_points_handler;
+    TF_HighLevelCallback sd_wallbox_data_points_hlc;
+
+    TF_WARPEnergyManager_SDWallboxDailyDataPointsHandler sd_wallbox_daily_data_points_handler;
+    TF_HighLevelCallback sd_wallbox_daily_data_points_hlc;
+
+    TF_WARPEnergyManager_SDEnergyManagerDataPointsHandler sd_energy_manager_data_points_handler;
+    TF_HighLevelCallback sd_energy_manager_data_points_hlc;
+
+    TF_WARPEnergyManager_SDEnergyManagerDailyDataPointsHandler sd_energy_manager_daily_data_points_handler;
+    TF_HighLevelCallback sd_energy_manager_daily_data_points_hlc;
 
 #endif
     uint16_t magic;
-    uint8_t response_expected[1];
+    uint8_t response_expected[2];
 } TF_WARPEnergyManager;
 
 /**
@@ -82,37 +113,117 @@ typedef struct TF_WARPEnergyManager {
 /**
  * \ingroup TF_WARPEnergyManager
  */
-#define TF_WARP_ENERGY_MANAGER_FUNCTION_RESET_ENERGY_METER_RELATIVE_ENERGY 8
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_INPUT 8
 
 /**
  * \ingroup TF_WARPEnergyManager
  */
-#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_INPUT 9
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_OUTPUT 9
 
 /**
  * \ingroup TF_WARPEnergyManager
  */
-#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_OUTPUT 10
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_OUTPUT 10
 
 /**
  * \ingroup TF_WARPEnergyManager
  */
-#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_OUTPUT 11
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_INPUT_VOLTAGE 11
 
 /**
  * \ingroup TF_WARPEnergyManager
  */
-#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_INPUT_VOLTAGE 12
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_STATE 12
 
 /**
  * \ingroup TF_WARPEnergyManager
  */
-#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_STATE 13
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_UPTIME 13
 
 /**
  * \ingroup TF_WARPEnergyManager
  */
 #define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_ALL_DATA_1 14
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_SD_INFORMATION 15
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_SD_WALLBOX_DATA_POINT 16
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_SD_WALLBOX_DATA_POINTS 17
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_SD_WALLBOX_DAILY_DATA_POINT 18
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_SD_WALLBOX_DAILY_DATA_POINTS 19
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_SD_ENERGY_MANAGER_DATA_POINT 20
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_SD_ENERGY_MANAGER_DATA_POINTS 21
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_SD_ENERGY_MANAGER_DAILY_DATA_POINT 22
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_SD_ENERGY_MANAGER_DAILY_DATA_POINTS 23
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_FORMAT_SD 28
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_DATE_TIME 29
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_DATE_TIME 30
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_LED_STATE 31
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_LED_STATE 32
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_GET_DATA_STORAGE 33
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FUNCTION_SET_DATA_STORAGE 34
 
 /**
  * \ingroup TF_WARPEnergyManager
@@ -176,6 +287,26 @@ typedef struct TF_WARPEnergyManager {
 
 #if TF_IMPLEMENT_CALLBACKS != 0
 
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_CALLBACK_SD_WALLBOX_DATA_POINTS_LOW_LEVEL 24
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_CALLBACK_SD_WALLBOX_DAILY_DATA_POINTS_LOW_LEVEL 25
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_CALLBACK_SD_ENERGY_MANAGER_DATA_POINTS_LOW_LEVEL 26
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_CALLBACK_SD_ENERGY_MANAGER_DAILY_DATA_POINTS_LOW_LEVEL 27
+
 #endif
 
 /**
@@ -197,6 +328,76 @@ typedef struct TF_WARPEnergyManager {
  * \ingroup TF_WARPEnergyManager
  */
 #define TF_WARP_ENERGY_MANAGER_ENERGY_METER_TYPE_SDM72V2 3
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_ENERGY_METER_TYPE_SDM72CTM 4
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_ENERGY_METER_TYPE_SDM630MCTV2 5
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_DATA_STATUS_OK 0
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_DATA_STATUS_SD_ERROR 1
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_DATA_STATUS_LFS_ERROR 2
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_DATA_STATUS_QUEUE_FULL 3
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_DATA_STATUS_DATE_OUT_OF_RANGE 4
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FORMAT_STATUS_OK 0
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FORMAT_STATUS_PASSWORD_ERROR 1
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_FORMAT_STATUS_FORMAT_ERROR 2
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_LED_PATTERN_OFF 0
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_LED_PATTERN_ON 1
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_LED_PATTERN_BLINKING 2
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ */
+#define TF_WARP_ENERGY_MANAGER_LED_PATTERN_BREATHING 3
 
 /**
  * \ingroup TF_WARPEnergyManager
@@ -351,8 +552,110 @@ int tf_warp_energy_manager_set_response_expected(TF_WARPEnergyManager *warp_ener
  * functions of this device at once.
  */
 int tf_warp_energy_manager_set_response_expected_all(TF_WARPEnergyManager *warp_energy_manager, bool response_expected);
+#if TF_IMPLEMENT_CALLBACKS != 0
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * Registers the given \c handler to the SD Wallbox Data Points Low Level callback. The
+ * \c user_data will be passed as the last parameter to the \c handler.
+ *
+ * Signature: \code void callback(uint16_t data_length, uint16_t data_chunk_offset, uint8_t data_chunk_data[60], void *user_data) \endcode
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_register_sd_wallbox_data_points_low_level_callback(TF_WARPEnergyManager *warp_energy_manager, TF_WARPEnergyManager_SDWallboxDataPointsLowLevelHandler handler, void *user_data);
 
 
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * Registers the given \c handler to the SD Wallbox Data Points callback. The
+ * \c user_data will be passed as the last parameter to the \c handler.
+ *
+ * Signature: \code void callback(uint8_t *data, uint16_t data_length, void *user_data) \endcode
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_register_sd_wallbox_data_points_callback(TF_WARPEnergyManager *warp_energy_manager, TF_WARPEnergyManager_SDWallboxDataPointsHandler handler, uint8_t *data, void *user_data);
+
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * Registers the given \c handler to the SD Wallbox Daily Data Points Low Level callback. The
+ * \c user_data will be passed as the last parameter to the \c handler.
+ *
+ * Signature: \code void callback(uint16_t data_length, uint16_t data_chunk_offset, uint32_t data_chunk_data[15], void *user_data) \endcode
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_register_sd_wallbox_daily_data_points_low_level_callback(TF_WARPEnergyManager *warp_energy_manager, TF_WARPEnergyManager_SDWallboxDailyDataPointsLowLevelHandler handler, void *user_data);
+
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * Registers the given \c handler to the SD Wallbox Daily Data Points callback. The
+ * \c user_data will be passed as the last parameter to the \c handler.
+ *
+ * Signature: \code void callback(uint32_t *data, uint16_t data_length, void *user_data) \endcode
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_register_sd_wallbox_daily_data_points_callback(TF_WARPEnergyManager *warp_energy_manager, TF_WARPEnergyManager_SDWallboxDailyDataPointsHandler handler, uint32_t *data, void *user_data);
+
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * Registers the given \c handler to the SD Energy Manager Data Points Low Level callback. The
+ * \c user_data will be passed as the last parameter to the \c handler.
+ *
+ * Signature: \code void callback(uint16_t data_length, uint16_t data_chunk_offset, uint8_t data_chunk_data[58], void *user_data) \endcode
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_register_sd_energy_manager_data_points_low_level_callback(TF_WARPEnergyManager *warp_energy_manager, TF_WARPEnergyManager_SDEnergyManagerDataPointsLowLevelHandler handler, void *user_data);
+
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * Registers the given \c handler to the SD Energy Manager Data Points callback. The
+ * \c user_data will be passed as the last parameter to the \c handler.
+ *
+ * Signature: \code void callback(uint8_t *data, uint16_t data_length, void *user_data) \endcode
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_register_sd_energy_manager_data_points_callback(TF_WARPEnergyManager *warp_energy_manager, TF_WARPEnergyManager_SDEnergyManagerDataPointsHandler handler, uint8_t *data, void *user_data);
+
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * Registers the given \c handler to the SD Energy Manager Daily Data Points Low Level callback. The
+ * \c user_data will be passed as the last parameter to the \c handler.
+ *
+ * Signature: \code void callback(uint16_t data_length, uint16_t data_chunk_offset, uint32_t data_chunk_data[14], void *user_data) \endcode
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_register_sd_energy_manager_daily_data_points_low_level_callback(TF_WARPEnergyManager *warp_energy_manager, TF_WARPEnergyManager_SDEnergyManagerDailyDataPointsLowLevelHandler handler, void *user_data);
+
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * Registers the given \c handler to the SD Energy Manager Daily Data Points callback. The
+ * \c user_data will be passed as the last parameter to the \c handler.
+ *
+ * Signature: \code void callback(uint32_t *data, uint16_t data_length, void *user_data) \endcode
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_register_sd_energy_manager_daily_data_points_callback(TF_WARPEnergyManager *warp_energy_manager, TF_WARPEnergyManager_SDEnergyManagerDailyDataPointsHandler handler, uint32_t *data, void *user_data);
+#endif
 #if TF_IMPLEMENT_CALLBACKS != 0
 /**
  * \ingroup TF_WARPEnergyManager
@@ -369,14 +672,14 @@ int tf_warp_energy_manager_callback_tick(TF_WARPEnergyManager *warp_energy_manag
  *
  * TBD
  */
-int tf_warp_energy_manager_set_contactor(TF_WARPEnergyManager *warp_energy_manager, bool value);
+int tf_warp_energy_manager_set_contactor(TF_WARPEnergyManager *warp_energy_manager, bool contactor_value);
 
 /**
  * \ingroup TF_WARPEnergyManager
  *
  * TBD
  */
-int tf_warp_energy_manager_get_contactor(TF_WARPEnergyManager *warp_energy_manager, bool *ret_value);
+int tf_warp_energy_manager_get_contactor(TF_WARPEnergyManager *warp_energy_manager, bool *ret_contactor_value);
 
 /**
  * \ingroup TF_WARPEnergyManager
@@ -397,7 +700,7 @@ int tf_warp_energy_manager_get_rgb_value(TF_WARPEnergyManager *warp_energy_manag
  *
  * TODO
  */
-int tf_warp_energy_manager_get_energy_meter_values(TF_WARPEnergyManager *warp_energy_manager, float *ret_power, float *ret_energy_relative, float *ret_energy_absolute, bool ret_phases_active[3], bool ret_phases_connected[3]);
+int tf_warp_energy_manager_get_energy_meter_values(TF_WARPEnergyManager *warp_energy_manager, float *ret_power, float *ret_energy_import, float *ret_energy_export);
 
 /**
  * \ingroup TF_WARPEnergyManager
@@ -412,13 +715,6 @@ int tf_warp_energy_manager_get_energy_meter_detailed_values_low_level(TF_WARPEne
  * TODO
  */
 int tf_warp_energy_manager_get_energy_meter_state(TF_WARPEnergyManager *warp_energy_manager, uint8_t *ret_energy_meter_type, uint32_t ret_error_count[6]);
-
-/**
- * \ingroup TF_WARPEnergyManager
- *
- * TODO
- */
-int tf_warp_energy_manager_reset_energy_meter_relative_energy(TF_WARPEnergyManager *warp_energy_manager);
 
 /**
  * \ingroup TF_WARPEnergyManager
@@ -460,7 +756,126 @@ int tf_warp_energy_manager_get_state(TF_WARPEnergyManager *warp_energy_manager, 
  *
  * TODO
  */
-int tf_warp_energy_manager_get_all_data_1(TF_WARPEnergyManager *warp_energy_manager, bool *ret_value, uint8_t *ret_r, uint8_t *ret_g, uint8_t *ret_b, float *ret_power, float *ret_energy_relative, float *ret_energy_absolute, bool ret_phases_active[3], bool ret_phases_connected[3], uint8_t *ret_energy_meter_type, uint32_t ret_error_count[6], bool ret_input[2], bool *ret_output, uint16_t *ret_voltage, uint8_t *ret_contactor_check_state);
+int tf_warp_energy_manager_get_uptime(TF_WARPEnergyManager *warp_energy_manager, uint32_t *ret_uptime);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_get_all_data_1(TF_WARPEnergyManager *warp_energy_manager, bool *ret_contactor_value, uint8_t *ret_r, uint8_t *ret_g, uint8_t *ret_b, float *ret_power, float *ret_energy_import, float *ret_energy_export, uint8_t *ret_energy_meter_type, uint32_t ret_error_count[6], bool ret_input[2], bool *ret_output, uint16_t *ret_voltage, uint8_t *ret_contactor_check_state, uint32_t *ret_uptime);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_get_sd_information(TF_WARPEnergyManager *warp_energy_manager, uint32_t *ret_sd_status, uint32_t *ret_lfs_status, uint16_t *ret_sector_size, uint32_t *ret_sector_count, uint32_t *ret_card_type, uint8_t *ret_product_rev, char ret_product_name[5], uint8_t *ret_manufacturer_id);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_set_sd_wallbox_data_point(TF_WARPEnergyManager *warp_energy_manager, uint32_t wallbox_id, uint8_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t flags, uint16_t power, uint8_t *ret_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_get_sd_wallbox_data_points(TF_WARPEnergyManager *warp_energy_manager, uint32_t wallbox_id, uint8_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint16_t amount, uint8_t *ret_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_set_sd_wallbox_daily_data_point(TF_WARPEnergyManager *warp_energy_manager, uint32_t wallbox_id, uint8_t year, uint8_t month, uint8_t day, uint32_t energy, uint8_t *ret_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_get_sd_wallbox_daily_data_points(TF_WARPEnergyManager *warp_energy_manager, uint32_t wallbox_id, uint8_t year, uint8_t month, uint8_t day, uint8_t amount, uint8_t *ret_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_set_sd_energy_manager_data_point(TF_WARPEnergyManager *warp_energy_manager, uint8_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint8_t flags, int32_t power_grid, const int32_t power_general[6], uint8_t *ret_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_get_sd_energy_manager_data_points(TF_WARPEnergyManager *warp_energy_manager, uint8_t year, uint8_t month, uint8_t day, uint8_t hour, uint8_t minute, uint16_t amount, uint8_t *ret_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_set_sd_energy_manager_daily_data_point(TF_WARPEnergyManager *warp_energy_manager, uint8_t year, uint8_t month, uint8_t day, uint32_t energy_grid_in, uint32_t energy_grid_out, const uint32_t energy_general_in[6], const uint32_t energy_general_out[6], uint8_t *ret_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_get_sd_energy_manager_daily_data_points(TF_WARPEnergyManager *warp_energy_manager, uint8_t year, uint8_t month, uint8_t day, uint8_t amount, uint8_t *ret_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_format_sd(TF_WARPEnergyManager *warp_energy_manager, uint32_t password, uint8_t *ret_format_status);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_set_date_time(TF_WARPEnergyManager *warp_energy_manager, uint8_t seconds, uint8_t minutes, uint8_t hours, uint8_t days, uint8_t days_of_week, uint8_t month, uint16_t year);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_get_date_time(TF_WARPEnergyManager *warp_energy_manager, uint8_t *ret_seconds, uint8_t *ret_minutes, uint8_t *ret_hours, uint8_t *ret_days, uint8_t *ret_days_of_week, uint8_t *ret_month, uint16_t *ret_year);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ *
+ */
+int tf_warp_energy_manager_set_led_state(TF_WARPEnergyManager *warp_energy_manager, uint8_t pattern, uint16_t hue);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ *
+ */
+int tf_warp_energy_manager_get_led_state(TF_WARPEnergyManager *warp_energy_manager, uint8_t *ret_pattern, uint16_t *ret_hue);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_get_data_storage(TF_WARPEnergyManager *warp_energy_manager, uint8_t page, uint8_t ret_data[63]);
+
+/**
+ * \ingroup TF_WARPEnergyManager
+ *
+ * TODO
+ */
+int tf_warp_energy_manager_set_data_storage(TF_WARPEnergyManager *warp_energy_manager, uint8_t page, const uint8_t data[63]);
 
 /**
  * \ingroup TF_WARPEnergyManager

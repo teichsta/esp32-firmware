@@ -1,7 +1,10 @@
+#!/usr/bin/python3 -u
+
 import socket
 import struct
 import sys
 import time
+import ipaddress
 
 """
 struct cm_packet_header {
@@ -29,6 +32,7 @@ struct cm_command_packet {
 
 struct cm_state_v1 {
     uint32_t feature_flags; /* unused */
+    uint32_t esp32_uid;
     uint32_t evse_uptime;
     uint32_t charging_time;
     uint16_t allowed_charging_current;
@@ -51,6 +55,7 @@ struct cm_state_v1 {
     float line_voltages[3];
     float line_currents[3];
     float line_power_factors[3];
+    float power_total;
     float energy_rel;
     float energy_abs;
 } __attribute__((packed));
@@ -63,14 +68,13 @@ struct cm_state_packet {
 
 header_format = "<HHHBx"
 command_format = header_format + "HBx"
-state_format = header_format + "IIIHHBBBBfffffffffff"
+state_format = header_format + "IIIIHHBBBBffffffffffff"
 
 command_len = struct.calcsize(command_format)
 state_len = struct.calcsize(state_format)
-print(state_len)
-
 
 listen_addr = sys.argv[1]
+uid = struct.unpack('>I', ipaddress.ip_address(listen_addr).packed)[0]
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 sock.bind((listen_addr, 34128))
@@ -85,7 +89,10 @@ app = QApplication([])
 window = QWidget()
 window.setWindowTitle(sys.argv[1])
 layout = QFormLayout()
-layout.addRow(QLabel("Request"))
+
+req_title = QLabel("Request")
+req_title.setStyleSheet("font-weight: bold;")
+layout.addRow(req_title)
 
 req_seq_num = QLabel("no packet received yet")
 layout.addRow("Sequence number", req_seq_num)
@@ -99,7 +106,9 @@ layout.addRow("Allocated current", req_allocated_current)
 req_cp_disconnect = QLabel("no packet received yet")
 layout.addRow("CP disconnect", req_cp_disconnect)
 
-layout.addRow(QLabel("Response"))
+resp_title = QLabel("Response")
+resp_title.setStyleSheet("font-weight: bold;")
+layout.addRow(resp_title)
 
 resp_seq_num = QLabel("no packet sent yet")
 layout.addRow("Sequence number", resp_seq_num)
@@ -131,7 +140,7 @@ layout.addRow("Vehicle state", resp_charger_state)
 
 resp_error_state = QSpinBox()
 resp_error_state.setMinimum(0)
-resp_error_state.setMaximum(4)
+resp_error_state.setMaximum(5)
 layout.addRow("Error state", resp_error_state)
 
 resp_uptime = QLabel("no packet sent yet")
@@ -150,7 +159,7 @@ resp_allowed_charging_current.setSuffix(" A")
 layout.addRow("Allowed charging current", resp_allowed_charging_current)
 
 resp_supported_current = QSpinBox()
-resp_supported_current.setMinimum(6)
+resp_supported_current.setMinimum(0)
 resp_supported_current.setMaximum(32)
 resp_supported_current.setSuffix(" A")
 layout.addRow("Supported current", resp_supported_current)
@@ -161,7 +170,6 @@ layout.addRow("Managed", resp_managed)
 
 resp_cp_disconnect = QCheckBox("CP disconnected")
 layout.addRow("CP disconnect state", resp_cp_disconnect)
-
 
 next_seq_num = 0
 protocol_version = 1
@@ -225,7 +233,8 @@ def send():
                     state_len,                                  # length
                     next_seq_num,
                     protocol_version if not resp_wrong_proto_version.isChecked() else 0,
-                    0,                                          # features
+                    0x7F,                                          # features
+                    uid,
                     uptime,
                     charging_time,
                     resp_allowed_charging_current.value() * 1000,
@@ -243,6 +252,7 @@ def send():
                     0,  # LPF0
                     0,  # LPF1
                     0,  # LPF2
+                    0,  # power_total
                     0,  # energy_rel
                     0)  # energy_abs
     if not resp_block_seq_num.isChecked():

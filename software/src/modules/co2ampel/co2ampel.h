@@ -26,21 +26,20 @@
 
 #include "config.h"
 
-class Co2Ampel {
+#include "module.h"
+
+class Co2Ampel final : public IModule
+{
 public:
     Co2Ampel(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
 
-    bool initialized = false;
-
-    void set_color(int c);
+    void set_color(uint32_t c);
 
     ConfigRoot state;
     ConfigRoot config;
-    ConfigRoot stop_blink;
 
 private:
     TF_CO2V2 co2;

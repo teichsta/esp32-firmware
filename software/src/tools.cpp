@@ -28,6 +28,7 @@
 #include "LittleFS.h"
 #include "esp_littlefs.h"
 #include "esp_system.h"
+#include "esp_timer.h"
 
 #include <soc/efuse_reg.h>
 #include "bindings/base58.h"
@@ -38,6 +39,8 @@
 #include "task_scheduler.h"
 
 #include <arpa/inet.h>
+
+extern TF_HAL hal;
 
 const char *tf_reset_reason()
 {
@@ -87,6 +90,18 @@ bool a_after_b(uint32_t a, uint32_t b)
 bool deadline_elapsed(uint32_t deadline_ms)
 {
     return a_after_b(millis(), deadline_ms);
+}
+
+micros_t operator""_usec(unsigned long long int i) {
+    return micros_t{(int64_t)i};
+}
+
+micros_t now_us() {
+    return micros_t{esp_timer_get_time()};
+}
+
+bool deadline_elapsed(micros_t deadline_us) {
+    return deadline_us == 0_usec || deadline_us < now_us();
 }
 
 void read_efuses(uint32_t *ret_uid_num, char *ret_uid_str, char *ret_passphrase)
@@ -366,21 +381,6 @@ bool mount_or_format_spiffs(void)
     return true;
 }
 
-String read_config_version()
-{
-    if (LittleFS.exists("/config/version")) {
-        StaticJsonDocument<JSON_OBJECT_SIZE(1) + 60> doc;
-        File file = LittleFS.open("/config/version", "r");
-
-        deserializeJson(doc, file);
-        file.close();
-
-        return doc["spiffs"].as<const char *>();
-    }
-    logger.printfln("Failed to read config version!");
-    return BUILD_VERSION_STRING;
-}
-
 static bool wait_for_bootloader_mode(TF_Unknown *bricklet, int target_mode)
 {
     uint8_t mode = 255;
@@ -505,7 +505,7 @@ static bool flash_firmware(TF_Unknown *bricklet, const uint8_t *firmware, size_t
 
         logger->printfln("    Status is 5, retrying.");
 
-        if (!flash_plugin(bricklet, firmware, firmware_len, regular_plugin_upto, logger)) {
+        if (!flash_plugin(bricklet, firmware, firmware_len, firmware_len, logger)) {
             return false;
         }
 
@@ -536,36 +536,17 @@ static bool flash_firmware(TF_Unknown *bricklet, const uint8_t *firmware, size_t
 #define FIRMWARE_MINOR_OFFSET 11
 #define FIRMWARE_PATCH_OFFSET 12
 
-class TFPSwap
-{
-public:
-    TFPSwap(TF_TFP *tfp) :
-        tfp(tfp),
-        device(tfp->device),
-        cb_handler(tfp->cb_handler)
-    {
-        tfp->device = nullptr;
-        tfp->cb_handler = nullptr;
-    }
-
-    ~TFPSwap()
-    {
-        tfp->device = device;
-        tfp->cb_handler = cb_handler;
-    }
-
-private:
-    TF_TFP *tfp;
-    void *device;
-    TF_TFP_CallbackHandler cb_handler;
-};
-
 int ensure_matching_firmware(TF_TFP *tfp, const char *name, const char *purpose, const uint8_t *firmware, size_t firmware_len, EventLog *logger, bool force)
 {
     TFPSwap tfp_swap(tfp);
     TF_Unknown bricklet;
+    auto old_timeout = tf_hal_get_timeout(&hal);
+    defer {tf_hal_set_timeout(&hal, old_timeout);};
+    tf_hal_set_timeout(&hal, 2500 * 1000);
+
 
     int rc = tf_unknown_create(&bricklet, tfp);
+    defer {tf_unknown_destroy(&bricklet);};
 
     if (rc != TF_E_OK) {
         logger->printfln("%s init failed (rc %d).", name, rc);
@@ -617,8 +598,6 @@ int ensure_matching_firmware(TF_TFP *tfp, const char *name, const char *purpose,
         }
     }
 
-    tf_unknown_destroy(&bricklet);
-
     return 0;
 }
 
@@ -645,10 +624,18 @@ int compare_version(uint8_t left_major, uint8_t left_minor, uint8_t left_patch,
     return 0;
 }
 
+#define BUILD_YEAR \
+    ( \
+        (__DATE__[ 7] - '0') * 1000 + \
+        (__DATE__[ 8] - '0') *  100 + \
+        (__DATE__[ 9] - '0') *   10 + \
+        (__DATE__[10] - '0') \
+    )
+
 bool clock_synced(struct timeval *out_tv_now)
 {
     gettimeofday(out_tv_now, nullptr);
-    return out_tv_now->tv_sec > ((2016 - 1970) * 365 * 24 * 60 * 60);
+    return out_tv_now->tv_sec > ((BUILD_YEAR - 1970) * 365 * 24 * 60 * 60);
 }
 
 uint32_t timestamp_minutes()
@@ -812,4 +799,96 @@ void list_dir(fs::FS &fs, const char * dirname, uint8_t max_depth, uint8_t curre
         }
         file = root.openNextFile();
     }
+}
+
+time_t ms_until_datetime(int *year, int *month, int *day, int *hour, int *minutes, int *seconds) {
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+
+	struct tm datetime;
+	localtime_r(&tv.tv_sec, &datetime);
+
+	if (year)    datetime.tm_year = *year    < 0 ? datetime.tm_year - *year    : *year  - 1900;
+	if (month)   datetime.tm_mon  = *month   < 0 ? datetime.tm_mon  - *month   : *month - 1;
+	if (day)     datetime.tm_mday = *day     < 0 ? datetime.tm_mday - *day     : *day;
+	if (hour)    datetime.tm_hour = *hour    < 0 ? datetime.tm_hour - *hour    : *hour;
+	if (minutes) datetime.tm_min  = *minutes < 0 ? datetime.tm_min  - *minutes : *minutes;
+	if (seconds) datetime.tm_sec  = *seconds < 0 ? datetime.tm_sec  - *seconds : *seconds;
+
+	time_t ts = mktime(&datetime);
+
+	return (ts - tv.tv_sec) * 1000 - tv.tv_usec / 1000;
+}
+
+time_t ms_until_time(int h, int m) {
+	int s = 0;
+	time_t delay = ms_until_datetime(NULL, NULL, NULL, &h, &m, &s);
+	if (delay <= 0) {
+		int d = -1;
+		delay = ms_until_datetime(NULL, NULL, &d, &h, &m, &s);
+	}
+	return delay;
+}
+
+bool Ownership::try_acquire(uint32_t owner_id)
+{
+    mutex.lock();
+
+    if (owner_id == current_owner_id) {
+        return true;
+    }
+
+    mutex.unlock();
+
+    return false;
+}
+
+void Ownership::release()
+{
+    mutex.unlock();
+}
+
+uint32_t Ownership::current()
+{
+    return current_owner_id;
+}
+
+uint32_t Ownership::next()
+{
+    mutex.lock();
+
+    uint32_t owner_id = ++current_owner_id;
+
+    mutex.unlock();
+
+    return owner_id;
+}
+
+OwnershipGuard::OwnershipGuard(Ownership *ownership, uint32_t owner_id): ownership(ownership)
+{
+    acquired = ownership->try_acquire(owner_id);
+}
+
+OwnershipGuard::~OwnershipGuard()
+{
+    if (acquired) {
+        ownership->release();
+    }
+}
+
+bool OwnershipGuard::have_ownership()
+{
+    return acquired;
+}
+
+void remove_separator(const char * const in, char *out) {
+    int written = 0;
+    size_t s = strlen(in);
+    for(int i = 0; i < s; ++i) {
+        if (in[i] == ':')
+            continue;
+        out[written] = in[i];
+        ++written;
+    }
+    out[written] = '\0';
 }

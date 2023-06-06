@@ -9,18 +9,17 @@
             "error": "Error",
             "configured_charging_current": "Configured charging current",
             "allowed_charging_current": "Allowed charging current",
-            "charging_current_minimum": "6 A",
-            "charging_current_maximum": "Max",
             "charge_control": "Charge control",
-            "auto_start_charging": "Auto-start",
             "start_charging": "Start",
             "stop_charging": "Stop"
         },
         "navbar": {
-            "evse": "Charge Controller"
+            "evse": "Charge Status",
+            "evse_settings": "Charge Settings"
         },
         "content": {
-            "evse": "Charge Controller (EVSE)",
+            "status": "Charge Status",
+            "settings": "Charge Settings",
             "iec_state": "IEC 61851 state",
             "iec_state_a": "A (disconnected)",
             "iec_state_b": "B (connected)",
@@ -57,11 +56,12 @@
             "jumper_config": "switch configured",
             "jumper_config_software": "Software",
             "jumper_config_unconfigured": "Unconfigured",
-            "evse_version": "Charge controller version",
+            "evse_version": "Charge controller hardware version",
+            "evse_fw_version": "Charge controller firmware version",
             "charging_current": "Charging current limits",
             "charging_current_muted": "minimum of the charging current limits",
             "reset_slot": "Release",
-            "low_level_state": "Low Level State",
+            "low_level_state": "Low-level state",
             "led_state": "LED state",
             "led_state_off": "Off",
             "led_state_on": "On",
@@ -83,7 +83,9 @@
             "debug_description": "Create charge log",
             "debug_description_muted": "to diagnose charging problems",
 
-            "settings": "Settings",
+            "auto_start_description": "Manual charge release",
+            "auto_start_description_muted": "<a href=\"https://www.warp-charger.com/evcc.html?v=2\">see manual for details</a>",
+            "auto_start_enable": "Requires that charges are always manually released via the web interface, the API or (depending on the button configuration) the button.",
 
             "external_description": "External control",
             "external_description_muted": "<a href=\"https://www.warp-charger.com/evcc.html?v=2\">see setup tutorial for details</a>",
@@ -99,6 +101,12 @@
             "reflash_evse": "Reflash",
             "charging_time": "Charging for",
 
+            "meter_monitoring": "Meter monitoring",
+            "meter_monitoring_desc": "Monitors the energy meter and blocks charging if a malfunction is detected.",
+
+            "enable_led_api": "Status-LED control",
+            "enable_led_api_desc": "Allows an external source to control the Status-LED.",
+
             "slot_0": "Supply cable",
             "slot_1": "Type 2 charging cable",
             "slot_2": "Shutdown input",
@@ -108,9 +116,11 @@
             "slot_6": "User",
             "slot_7": "Charge manager",
             "slot_8": "External control",
-            "slot_9": "Modbus TCP",
+            "slot_9": "Modbus TCP current",
             "slot_10": "Modbus TCP clearance",
-            "slot_11": "OCPP"
+            "slot_11": "OCPP",
+            "slot_12": "Energy/Time limit",
+            "slot_13": "Meter monitoring"
         },
         "script": {
             "error_code": "Error code",
@@ -150,7 +160,11 @@
             "slot_8": "External control",
             "slot_9": "Modbus TCP",
             "slot_10": "Modbus TCP clearance",
-            "slot_11": "OCPP"
+            "slot_11": "OCPP",
+            "slot_12": "Energy/Time limit",
+            "slot_13": "Meter monitoring",
+
+            "reboot_content_changed": "Charge Settings"
         }
     }
 }

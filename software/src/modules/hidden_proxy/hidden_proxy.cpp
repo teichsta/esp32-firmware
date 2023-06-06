@@ -57,8 +57,10 @@ void HiddenProxy::start_proxy()
         logger.printfln("TF_Net already allocated?");
     } else {
         net = (TF_Net *)malloc(sizeof(TF_Net));
-        if (net == nullptr)
+        if (net == nullptr) {
             logger.printfln("Failed to allocate TF_Net");
+            return;
+        }
     }
 
     if (blinky_running)
@@ -93,14 +95,6 @@ void HiddenProxy::stop_proxy()
     net = nullptr;
 }
 
-void HiddenProxy::pre_setup()
-{
-}
-
-void HiddenProxy::setup()
-{
-}
-
 void HiddenProxy::register_urls()
 {
     server.on("/hidden_proxy/enable", HTTP_GET, [this](WebServerRequest request) {
@@ -112,8 +106,4 @@ void HiddenProxy::register_urls()
         stop_proxy();
         return request.send(200);
     });
-}
-
-void HiddenProxy::loop()
-{
 }

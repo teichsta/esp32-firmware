@@ -21,11 +21,12 @@
 
 #include "config.h"
 
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
+#include <lwip/err.h>
+#include <lwip/sockets.h>
+#include <lwip/sys.h>
 #include <lwip/netdb.h>
 
+#include "module.h"
 #include "mdns.h"
 #include "TFJson.h"
 
@@ -151,14 +152,15 @@ struct cm_state_v1 {
     Other bits must be sent unset and ignored on reception.
     */
     uint32_t feature_flags;
+    uint32_t esp32_uid;
     uint32_t evse_uptime;
     uint32_t charging_time;
     uint16_t allowed_charging_current;
     uint16_t supported_current;
-    
+
     uint8_t iec61851_state;
     uint8_t charger_state;
-    uint8_t error_state;    
+    uint8_t error_state;
     /* state_flags
     bit 7 - managed
     bit 6 - control_pilot_permanently_disconnected
@@ -173,12 +175,13 @@ struct cm_state_v1 {
     float line_voltages[3];
     float line_currents[3];
     float line_power_factors[3];
+    float power_total;
     float energy_rel;
     float energy_abs;
 } __attribute__((packed));
 
 #define CM_STATE_V1_LENGTH (sizeof(cm_state_v1))
-static_assert(CM_STATE_V1_LENGTH == 64);
+static_assert(CM_STATE_V1_LENGTH == 72, "Unexpected CM_STATE_V1_LENGTH");
 
 struct cm_state_packet {
     cm_packet_header header;
@@ -186,40 +189,27 @@ struct cm_state_packet {
 } __attribute__((packed));
 
 #define CM_STATE_PACKET_LENGTH (sizeof(cm_state_packet))
-static_assert(CM_STATE_PACKET_LENGTH == 72);
+static_assert(CM_STATE_PACKET_LENGTH == 80, "Unexpected CM_STATE_PACKET_LENGTH");
 
-class CMNetworking
+class CMNetworking final : public IModule
 {
 public:
     CMNetworking(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
-
-    bool initialized = false;
+    void setup() override;
+    void register_urls() override;
 
     int create_socket(uint16_t port);
 
     void register_manager(std::vector<String> &&hosts,
                           const std::vector<String> &names,
-                          std::function<void(uint8_t,  // client_id
-                                             uint8_t,  // iec61851_state
-                                             uint8_t,  // charger_state
-                                             uint8_t,  // error_state
-                                             uint32_t, // uptime
-                                             uint32_t, // charging_time
-                                             uint16_t, // allowed_charging_current
-                                             uint16_t, // supported_current
-                                             bool,     // cp_disconnect_supported
-                                             bool      // cp_disconnected_state
-                                             )> manager_callback,
+                          std::function<void(uint8_t /* client_id */, cm_state_v1 *)> manager_callback,
                           std::function<void(uint8_t, uint8_t)> manager_error_callback);
 
     bool send_manager_update(uint8_t client_id, uint16_t allocated_current, bool cp_disconnect_requested);
 
     void register_client(std::function<void(uint16_t, bool)> client_callback);
-    bool send_client_update(uint8_t iec61851_state,
+    bool send_client_update(uint32_t esp32_uid,
+                            uint8_t iec61851_state,
                             uint8_t charger_state,
                             uint8_t error_state,
                             uint32_t uptime,
@@ -233,15 +223,17 @@ public:
 
     void resolve_hostname(uint8_t charger_idx);
     bool is_resolved(uint8_t charger_idx);
+    void clear_cached_hostname(uint8_t charger_idx);
 
-    String validate_packet_header(const struct cm_packet_header *header, ssize_t recv_length) const;
+    String validate_packet_header(const struct cm_packet_header *header, ssize_t recv_length, const uint8_t packet_length_versions[], const char *packet_type_name) const;
     String validate_command_packet_header(const struct cm_command_packet *pkt, ssize_t recv_length) const;
     String validate_state_packet_header(const struct cm_state_packet *pkt, ssize_t recv_length) const;
     bool seq_num_invalid(uint16_t received_sn, uint16_t last_seen_sn) const;
 
-    bool check_results();
+    void check_results();
 
     bool scanning = false;
+    bool periodic_scan_task_started = false;
 
     mdns_search_once_t *scan;
 
@@ -265,6 +257,8 @@ private:
     struct sockaddr_storage manager_addr;
 
     void start_scan();
+    bool mdns_result_is_charger(mdns_result_t *entry, const char ** ret_version, const char **ret_enabled, const char **ret_display_name);
+    void resolve_via_mdns(mdns_result_t *entry);
 
     #define SCAN_RESULT_ERROR_OK 0
     #define SCAN_RESULT_ERROR_FIRMWARE_MISMATCH 1

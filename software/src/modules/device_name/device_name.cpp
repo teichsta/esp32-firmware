@@ -28,8 +28,8 @@ extern char local_uid_str[32];
 void DeviceName::pre_setup()
 {
     name = Config::Object({
-        {"name", Config::Str("")},
-        {"type", Config::Str(BUILD_HOST_PREFIX)},
+        {"name", Config::Str("", 0, strlen(BUILD_HOST_PREFIX) + 1 + ARRAY_SIZE(local_uid_str))},
+        {"type", Config::Str(BUILD_HOST_PREFIX, 0, strlen(BUILD_HOST_PREFIX))},
         {"display_type", Config::Str("", 0, 64)},
         {"uid", Config::Str("", 0, 32)}
     });
@@ -64,6 +64,11 @@ String getWarpDisplayName()
 }
 #endif
 
+static bool isVowel(char c)
+{
+    return (0x208222 >> (c & 0x1f)) & 1;
+}
+
 void DeviceName::updateDisplayType()
 {
     String display_type = BUILD_DISPLAY_NAME;
@@ -71,8 +76,10 @@ void DeviceName::updateDisplayType()
     display_type += getWarpDisplayName(); // FIXME: Also add more details for WARP Energy Manager, similar to WARP[2] here?
 #endif
 
+    const char *indef_article = isVowel(display_type[0]) ? "an" : "a";
+
     if (name.get("display_type")->updateString(display_type)) {
-        logger.printfln("This is %s (%s), a %s", display_name.get("display_name")->asEphemeralCStr(), name.get("name")->asEphemeralCStr(), name.get("display_type")->asEphemeralCStr());
+        logger.printfln("This is %s (%s), %s %s", display_name.get("display_name")->asEphemeralCStr(), name.get("name")->asEphemeralCStr(), indef_article, display_type.c_str());
     }
 }
 
@@ -99,8 +106,4 @@ void DeviceName::register_urls()
 {
     api.addState("info/name", &name, {}, 1000);
     api.addPersistentConfig("info/display_name", &display_name, {}, 1000);
-}
-
-void DeviceName::loop()
-{
 }

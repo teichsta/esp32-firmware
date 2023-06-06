@@ -88,7 +88,7 @@ void Wifi::pre_setup()
             )
         },
         {"bssid_lock", Config::Bool(false)},
-        {"passphrase", Config::Str("", 8, 64)},
+        {"passphrase", Config::Str("", 0, 64)},
         {"ip", Config::Str("0.0.0.0", 7, 15)},
         {"gateway", Config::Str("0.0.0.0", 7, 15)},
         {"subnet", Config::Str("0.0.0.0", 7, 15)},
@@ -130,7 +130,9 @@ void Wifi::pre_setup()
     });
 
     wifi_state = Config::Object({
-        {"connection_state", Config::Int(0)},
+        {"connection_state", Config::Int((int32_t)WifiState::NOT_CONFIGURED)},
+        {"connection_start", Config::Uint32(0)},
+        {"connection_end", Config::Uint32(0)},
         {"ap_state", Config::Int(0)},
         {"ap_bssid", Config::Str("", 0, 20)},
         {"sta_ip", Config::Str("0.0.0.0", 7, 15)},
@@ -160,7 +162,7 @@ void Wifi::apply_soft_ap_config_and_start()
     static int channel_to_use = wifi_ap_config_in_use.get("channel")->asUint();
 
     // We don't want apply_soft_ap_config_and_start
-    // to be called over and over in the loop
+    // to be called over and over from the fallback AP task
     // if we are still scanning for a channel.
     soft_ap_running = true;
 
@@ -236,7 +238,8 @@ void Wifi::apply_soft_ap_config_and_start()
 
     int counter = 0;
     while (ip != WiFi.softAPIP()) {
-        WiFi.softAPConfig(ip, gateway, subnet);
+        if (!WiFi.softAPConfig(ip, gateway, subnet))
+            logger.printfln("WiFi.softAPConfig() failed. Try different Access Point settings.");
         ++counter;
     }
     logger.printfln("Had to configure soft AP IP address %d times.", counter);
@@ -256,7 +259,12 @@ void Wifi::apply_soft_ap_config_and_start()
 
 bool Wifi::apply_sta_config_and_connect()
 {
-    if (get_connection_state() == WifiState::CONNECTED) {
+    return apply_sta_config_and_connect(get_connection_state());
+}
+
+bool Wifi::apply_sta_config_and_connect(WifiState current_state)
+{
+    if (current_state == WifiState::CONNECTED) {
         return false;
     }
 
@@ -264,12 +272,12 @@ bool Wifi::apply_sta_config_and_connect()
     WiFi.setAutoReconnect(false);
     WiFi.disconnect(false, true);
 
-    const String &ssid = wifi_sta_config_in_use.get("ssid")->asString();
+    const char *ssid = wifi_sta_config_in_use.get("ssid")->asEphemeralCStr();
 
     uint8_t bssid[6];
     wifi_sta_config_in_use.get("bssid")->fillArray<uint8_t, Config::ConfUint>(bssid, 6 * sizeof(bssid));
 
-    const String &passphrase = wifi_sta_config_in_use.get("passphrase")->asString();
+    const char *passphrase = wifi_sta_config_in_use.get("passphrase")->asEphemeralCStr();
     bool bssid_lock = wifi_sta_config_in_use.get("bssid_lock")->asBool();
 
     IPAddress ip, subnet, gateway, dns, dns2;
@@ -286,9 +294,9 @@ bool Wifi::apply_sta_config_and_connect()
         WiFi.config((uint32_t)0, (uint32_t)0, (uint32_t)0);
     }
 
-    logger.printfln("Wifi connecting to %s", ssid.c_str());
+    logger.printfln("Wifi connecting to %s", ssid);
 
-    WiFi.begin(ssid.c_str(), passphrase.c_str(), 0, bssid_lock ? bssid : nullptr, true);
+    WiFi.begin(ssid, passphrase, 0, bssid_lock ? bssid : nullptr, true);
     WiFi.setSleep(false);
     return true;
 }
@@ -386,13 +394,22 @@ void Wifi::setup()
     WiFi.persistent(false);
 
     WiFi.onEvent([this](arduino_event_id_t event, arduino_event_info_t info) {
+            static bool first = true;
             uint8_t reason_code = info.wifi_sta_disconnected.reason;
             const char *reason = reason2str(reason_code);
             if (!this->was_connected) {
+            {
                 logger.printfln("Wifi failed to connect to %s: %s (%u)", wifi_sta_config_in_use.get("ssid")->asEphemeralCStr(), reason, reason_code);
+                if (first)
+                {
+                    first = false;
+                    this->apply_sta_config_and_connect();
+                }
+            }
             } else {
                 uint32_t now = millis();
                 uint32_t connected_for = now - last_connected_ms;
+                wifi_state.get("connection_end")->updateUint(now);
 
                 // FIXME: Use a better way of time keeping here.
                 if (connected_for < 0x7FFFFFFF)
@@ -413,6 +430,7 @@ void Wifi::setup()
 
             logger.printfln("Wifi connected to %s", WiFi.SSID().c_str());
             last_connected_ms = millis();
+            wifi_state.get("connection_start")->updateUint(last_connected_ms);
         },
         ARDUINO_EVENT_WIFI_STA_CONNECTED);
 
@@ -457,7 +475,11 @@ void Wifi::setup()
 
     // For some reason WiFi.setHostname only writes a temporary buffer that is passed to the IDF when calling WiFi.mode.
     // As we have the same hostname for STA and AP, it is sufficient to set the hostname here once and never call WiFi.softAPsetHostname.
+#if MODULE_NETWORK_AVAILABLE()
     WiFi.setHostname(network.config.get("hostname")->asEphemeralCStr());
+#else
+    WiFi.setHostname((String(BUILD_HOST_PREFIX) + String("-") + String(local_uid_str)).c_str());
+#endif
 
     if (enable_sta && enable_ap) {
         WiFi.mode(WIFI_AP_STA);
@@ -481,6 +503,18 @@ void Wifi::setup()
 
     esp_wifi_set_ps(WIFI_PS_NONE);
 
+    // We don't need the additional speed of HT40 and it only causes more errors.
+    if (enable_sta) {
+        esp_err_t err = esp_wifi_set_bandwidth(WIFI_IF_STA, WIFI_BW_HT20);
+        if (err != ESP_OK)
+            logger.printfln("WiFi: Setting HT20 for station failed: %i", err);
+    }
+    if (enable_ap) {
+        esp_err_t err = esp_wifi_set_bandwidth(WIFI_IF_AP, WIFI_BW_HT20);
+        if (err != ESP_OK)
+            logger.printfln("WiFi: Setting HT20 for AP failed: %i", err);
+    }
+
     WiFi.setTxPower(WIFI_POWER_19_5dBm);
 
     wifi_state.get("ap_bssid")->updateString(WiFi.softAPmacAddress());
@@ -492,31 +526,52 @@ void Wifi::setup()
         WiFi.softAPdisconnect(true);
     }
 
-    if (enable_sta) {
-        task_scheduler.scheduleWithFixedDelay([this](){
-            static int backoff = 1;
-            static int backoff_counter = 0;
-
-            if (backoff_counter > 0) {
-                --backoff_counter;
-                return;
-            }
-
-            if (!apply_sta_config_and_connect()) {
-                // We are already connected. Reset exponential backoff
-                backoff = 1;
-                backoff_counter = 0;
-            } else {
-                if (backoff <= 32)
-                    backoff *= 2;
-                backoff_counter = backoff;
-            }
+    if (enable_ap) {
+        task_scheduler.scheduleWithFixedDelay([this]() {
+            wifi_state.get("ap_state")->updateInt(get_ap_state());
         }, 5000, 5000);
     }
 
-    task_scheduler.scheduleWithFixedDelay([this](){
-        wifi_state.get("sta_rssi")->updateInt(WiFi.RSSI());
-    }, 5000, 5000);
+    if (enable_sta) {
+        task_scheduler.scheduleWithFixedDelay([this]() {
+            WifiState connection_state = get_connection_state();
+            wifi_state.get("connection_state")->updateInt((int)connection_state);
+            wifi_state.get("sta_rssi")->updateInt(WiFi.RSSI());
+
+            static int tries = 0;
+            if (tries < 10 || (tries - 10) % 8 == 0)
+                if (!apply_sta_config_and_connect(connection_state))
+                    tries = 0;
+            tries++;
+        }, 0, 5000);
+    }
+
+    if (ap_fallback_only) {
+        task_scheduler.scheduleWithFixedDelay([this]() {
+            bool connected = false;
+
+#if MODULE_ETHERNET_AVAILABLE()
+            connected = ethernet.get_connection_state() == EthernetState::CONNECTED;
+#endif
+            if (!connected)
+                connected = (WifiState)wifi_state.get("connection_state")->asInt() == WifiState::CONNECTED;
+
+            if (connected == soft_ap_running) {
+                if (connected) {
+                    logger.printfln("Network connected. Stopping soft AP");
+                    WiFi.softAPdisconnect(true);
+                    soft_ap_running = false;
+                } else {
+                    apply_soft_ap_config_and_start();
+                }
+            }
+        },
+        enable_sta
+#if MODULE_ETHERNET_AVAILABLE()
+        || (ethernet.is_enabled() && ethernet.get_connection_state() != EthernetState::NOT_CONNECTED)
+#endif
+        ? 30 * 1000 : 1000, 10 * 1000);
+    }
 
     initialized = true;
 }
@@ -590,7 +645,7 @@ void Wifi::check_for_scan_completion()
 
 void Wifi::start_scan()
 {
-    // Abort if a scan is running. This is save, because
+    // Abort if a scan is running. This is safe, because
     // the state will change to SCAN_FAILED if it timed out.
     if (WiFi.scanComplete() == WIFI_SCAN_RUNNING)
         return;
@@ -646,31 +701,7 @@ void Wifi::register_urls()
     api.addPersistentConfig("wifi/ap_config", &wifi_ap_config, {"passphrase"}, 1000);
 }
 
-void Wifi::loop()
-{
-    auto connection_state = get_connection_state();
-    wifi_state.get("connection_state")->updateInt((int)connection_state);
-    wifi_state.get("ap_state")->updateInt(get_ap_state());
-
-    bool ap_fallback_only = wifi_ap_config_in_use.get("enable_ap")->asBool() && wifi_ap_config_in_use.get("ap_fallback_only")->asBool();
-    bool ethernet_connected = false;
-#if MODULE_ETHERNET_AVAILABLE()
-    ethernet_connected = ethernet.get_connection_state() == EthernetState::CONNECTED;
-#endif
-    bool connected = (wifi_sta_config_in_use.get("enable_sta")->asBool() && connection_state == WifiState::CONNECTED) || ethernet_connected;
-
-    if (!connected && ap_fallback_only && !soft_ap_running) {
-        apply_soft_ap_config_and_start();
-    }
-
-    if (connected && ap_fallback_only && soft_ap_running) {
-        logger.printfln("Network connected. Stopping soft AP");
-        WiFi.softAPdisconnect(true);
-        soft_ap_running = false;
-    }
-}
-
-WifiState Wifi::get_connection_state()
+WifiState Wifi::get_connection_state() const
 {
     if (!wifi_sta_config_in_use.get("enable_sta")->asBool())
         return WifiState::NOT_CONFIGURED;
@@ -693,14 +724,21 @@ WifiState Wifi::get_connection_state()
     }
 }
 
+bool Wifi::is_sta_enabled() const
+{
+    return wifi_sta_config_in_use.get("enable_sta")->asBool();
+}
+
 int Wifi::get_ap_state()
 {
     bool enable_ap = wifi_ap_config_in_use.get("enable_ap")->asBool();
-    bool ap_fallback = wifi_ap_config_in_use.get("ap_fallback_only")->asBool();
     if (!enable_ap)
         return 0;
+
+    bool ap_fallback = wifi_ap_config_in_use.get("ap_fallback_only")->asBool();
     if (!ap_fallback)
         return 1;
+
     if (!soft_ap_running)
         return 2;
 

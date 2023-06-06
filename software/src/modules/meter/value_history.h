@@ -37,7 +37,11 @@
 // and add it to the coarse history.
 #define HISTORY_MINUTE_INTERVAL 4
 
-#define RING_BUF_SIZE (HISTORY_HOURS * (60 / HISTORY_MINUTE_INTERVAL) + 1)
+#define RING_BUF_SIZE (HISTORY_HOURS * 60 / HISTORY_MINUTE_INTERVAL)
+
+#ifndef METER_VALUE_HISTORY_VALUE_TYPE
+#define METER_VALUE_HISTORY_VALUE_TYPE int16_t
+#endif
 
 class ValueHistory
 {
@@ -49,10 +53,19 @@ public:
     void setup();
     void register_urls(String base_url);
     void add_sample(float sample);
+    size_t format_live(char *buf, size_t buf_size);
+    size_t format_history(char *buf, size_t buf_size);
+    float samples_per_second();
+
+    int samples_this_interval = 0;
+    uint32_t begin_this_interval = 0;
+    uint32_t end_this_interval = 0;
 
     int samples_last_interval = 0;
-    int samples_per_interval = -1;
-    TF_Ringbuffer<int16_t,
+    uint32_t begin_last_interval = 0;
+    uint32_t end_last_interval = 0;
+
+    TF_Ringbuffer<METER_VALUE_HISTORY_VALUE_TYPE,
                   3 * 60 * HISTORY_MINUTE_INTERVAL,
                   uint32_t,
 #if defined(BOARD_HAS_PSRAM)
@@ -61,9 +74,10 @@ public:
                   malloc_32bit_addressed,
 #endif
                   heap_caps_free> live;
+    uint32_t live_last_update = 0;
 
-    TF_Ringbuffer<int16_t,
-                  HISTORY_HOURS *(60 / HISTORY_MINUTE_INTERVAL) + 1,
+    TF_Ringbuffer<METER_VALUE_HISTORY_VALUE_TYPE,
+                  RING_BUF_SIZE,
                   uint32_t,
 #if defined(BOARD_HAS_PSRAM)
                   malloc_psram,
@@ -71,4 +85,5 @@ public:
                   malloc_32bit_addressed,
 #endif
                   heap_caps_free> history;
+    uint32_t history_last_update = 0;
 };

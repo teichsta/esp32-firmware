@@ -6,6 +6,8 @@ import hashlib
 from zipfile import ZipFile
 import json
 import re
+import binascii
+import struct
 
 def get_digest_paths(dst_dir, var_name, env=None):
     if env is not None:
@@ -47,7 +49,7 @@ def check_digest(src_paths, src_datas, dst_dir, var_name, env=None):
     except FileNotFoundError:
         old_digest2 = None
 
-    # caclulate new digest
+    # calculate new digest
     h = hashlib.sha256()
 
     with open(__file__, 'rb') as f:
@@ -155,6 +157,15 @@ def embed_data_with_digest(data, dst_dir, var_name, var_type, data_filter=lambda
         embed_data_internal(data_filter(data), cpp_path, h_path, var_name, var_type)
         store_digest(new_digest, dst_dir, var_name)
 
+def patch_beta_firmware(data, beta_version):
+    data = bytearray(data)
+    data[-10] = 200 + beta_version
+
+    new_checksum = struct.pack('<I', binascii.crc32(data[:-4]) & 0xFFFFFFFF)
+    print(new_checksum.hex())
+    data = data[:-4] + new_checksum
+    return data
+
 def embed_bricklet_firmware_bin(env=None):
     firmwares = [x for x in os.listdir('.') if x.endswith('.zbin') and x.startswith('bricklet_')]
 
@@ -167,7 +178,7 @@ def embed_bricklet_firmware_bin(env=None):
         sys.exit(-1)
 
     firmware = firmwares[0]
-    m = re.fullmatch('bricklet_(.*)_firmware_\d+_\d+_\d+.zbin', firmware)
+    m = re.fullmatch('bricklet_(.*)_firmware_\d+_\d+_\d+(?:_beta(\d+))?.zbin', firmware)
 
     if m == None:
         print('Firmware {} did not match naming schema'.format(firmware))
@@ -177,7 +188,13 @@ def embed_bricklet_firmware_bin(env=None):
 
     with ZipFile(firmware) as zf:
         with zf.open('{}-bricklet-firmware.bin'.format(firmware_name.replace('_', '-')), 'r') as f:
-            embed_data_with_digest(f.read(), '.', firmware_name + '_bricklet_firmware_bin', 'uint8_t', env=env)
+            fw = f.read()
+
+    beta_version = m.group(2)
+    if beta_version is not None:
+        fw = patch_beta_firmware(fw, int(beta_version))
+
+    embed_data_with_digest(fw, '.', firmware_name + '_bricklet_firmware_bin', 'uint8_t', env=env)
 
 def merge(left, right, path=[]):
     for key in right:
@@ -191,11 +208,11 @@ def merge(left, right, path=[]):
     return left
 
 def parse_ts_file(path, name, used_placeholders, template_literals):
-    with open(path, 'r') as f:
+    with open(path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    placeholders = re.findall('__\(([^\)]*)', content)
-    placeholders_unchecked = re.findall('translate_unchecked\(([^\)]*)', content)
+    placeholders = [x.strip() for x in re.findall('__\(([^\)]*)', content)]
+    placeholders_unchecked = [x.strip() for x in re.findall('translate_unchecked\(([^\)]*)', content)]
 
     template_literal_keys = [x for x in placeholders_unchecked if x[0] == '`' and x[-1] == '`' and '${' in x and '}' in x]
     placeholders = [x for x in placeholders if x not in template_literal_keys]

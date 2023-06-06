@@ -20,21 +20,21 @@
 #pragma once
 
 #include "config.h"
+
+#include "module.h"
 #include "ocpp/ChargePoint.h"
 
-class Ocpp {
+class Ocpp final : public IModule
+{
 public:
     Ocpp(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
 
     void on_tag_seen(const char *tag_id);
 
-    bool initialized = false;
-
-    OcppChargePoint cp;
+    std::unique_ptr<OcppChargePoint> cp;
 
     void(*tag_seen_cb)(int32_t, const char *, void *) = nullptr;
     void *tag_seen_cb_user_data = nullptr;
@@ -43,4 +43,5 @@ public:
     ConfigRoot config_in_use;
     ConfigRoot state;
     ConfigRoot configuration;
+    ConfigRoot change_configuration;
 };

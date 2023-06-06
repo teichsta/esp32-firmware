@@ -19,19 +19,20 @@
 
 #pragma once
 
+#include "config.h"
+
 #include <stdint.h>
+
+#include "module.h"
 #include "web_server.h"
 
-class FirmwareUpdate
+class FirmwareUpdate final : public IModule
 {
 public:
     FirmwareUpdate(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
-
-    bool initialized = false;
+    void setup() override;
+    void register_urls() override;
+    void loop() override;
 
     bool firmware_update_running = false;
 

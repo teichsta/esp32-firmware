@@ -21,23 +21,30 @@
 
 #include "config.h"
 
+#include "module.h"
+
 #define IND_ACK 1001
 #define IND_NACK 1002
 #define IND_NAG 1003
 
-class Users
+#define USERNAME_LENGTH 32
+#define DISPLAY_NAME_LENGTH 32
+#define USERNAME_ENTRY_LENGTH (USERNAME_LENGTH + DISPLAY_NAME_LENGTH)
+#define MAX_PASSIVE_USERS 256
+
+class Users final : public IModule
 {
 public:
     Users(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
 
     uint8_t next_user_id();
     void rename_user(uint8_t user_id, const String &username, const String &display_name);
     void remove_from_username_file(uint8_t user_id);
     void search_next_free_user();
+    int get_display_name(uint8_t user_id, char *ret_buf);
 
     #define TRIGGER_CHARGE_ANY 0
     #define TRIGGER_CHARGE_START 1
@@ -46,8 +53,6 @@ public:
 
     void remove_username_file();
 
-    bool initialized = false;
-
     ConfigRoot user_config;
     ConfigRoot add;
     ConfigRoot remove;
@@ -55,9 +60,7 @@ public:
     ConfigRoot http_auth_update;
 
     bool start_charging(uint8_t user_id, uint16_t current_limit, uint8_t auth_type, Config::ConfVariant auth_info);
-    bool stop_charging(uint8_t user_id, bool force);
-    int16_t get_blink_state();
-    void set_blink_state(int16_t state);
+    bool stop_charging(uint8_t user_id, bool force, float meter_abs = 0);
 
 private:
     int16_t blink_state = -1;

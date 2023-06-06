@@ -21,7 +21,9 @@
 
 #include "config.h"
 
+#include "module.h"
 #include "value_history.h"
+#include "tools.h"
 
 #define METER_ALL_VALUES_COUNT 85
 
@@ -34,8 +36,15 @@
 #define METER_TYPE_SDM630 2
 #define METER_TYPE_SDM72DMV2 3
 
+// Supported by energy_manager module
+#define METER_TYPE_SDM72CTM 4
+#define METER_TYPE_SDM630MCTV2 5
+
 // Supported by mqtt_meter module
-#define METER_TYPE_MQTT 4
+#define METER_TYPE_CUSTOM_BASIC 200
+
+// Supported by https://github.com/warp-more-hardware
+#define METER_TYPE_INTERNAL 254
 
 // Supported by modbus_meter module
 #define METER_TYPE_AUTO_DETECT 255
@@ -126,14 +135,13 @@
 #define METER_ALL_VALUES_TOTAL_KVARH_L2 83
 #define METER_ALL_VALUES_TOTAL_KVARH_L3 84
 
-class Meter
+class Meter final : public IModule
 {
 public:
     Meter(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
 
     void updateMeterState(uint8_t new_state, uint8_t new_type);
     void updateMeterState(uint8_t new_state);
@@ -147,7 +155,8 @@ public:
 
     void setupMeter(uint8_t meter_type);
 
-    bool initialized = false;
+    bool all_values_changed();
+
     bool meter_setup_done = false;
 
     ConfigRoot state;
@@ -157,6 +166,8 @@ public:
     ConfigRoot last_reset;
 
     ValueHistory power_hist;
+
+    micros_t last_value_change = 0_usec;
 
     std::vector<std::function<void(void)>> reset_callbacks;
 };

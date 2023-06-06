@@ -19,12 +19,12 @@
 
 #pragma once
 
+#include "config.h"
+
 #include "bindings/bricklet_rs485.h"
 
-#include "config.h"
 #include "device_module.h"
 #include "rs485_bricklet_firmware_bin.embedded.h"
-
 #include "meter_defs.h"
 
 class ModbusMeter : public DeviceModule<TF_RS485,
@@ -33,14 +33,17 @@ class ModbusMeter : public DeviceModule<TF_RS485,
                                         tf_rs485_create,
                                         tf_rs485_get_bootloader_mode,
                                         tf_rs485_reset,
-                                        tf_rs485_destroy>
+                                        tf_rs485_destroy,
+                                        false>
 {
 public:
     ModbusMeter() : DeviceModule("rs485", "RS485", "Modbus Meter", std::bind(&ModbusMeter::setupRS485, this)) {}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
+    void loop() override;
+
+    void checkRS485State();
 
     enum class UserDataDone {
         NOT_DONE,
@@ -61,7 +64,6 @@ public:
 private:
     void modbus_read();
     void setupRS485();
-    void checkRS485State();
     const RegRead *getNextRead(bool *trigger_fast_read_done, bool *trigger_slow_read_done);
 
     TF_RS485 rs485;

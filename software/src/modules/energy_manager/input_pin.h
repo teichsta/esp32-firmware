@@ -23,19 +23,21 @@
 
 class InputPin {
 public:
-    InputPin(uint32_t num_name, uint32_t num_logic, const ConfigRoot &conf);
+    InputPin(uint32_t num_name, uint32_t num_logic, const ConfigRoot &conf, bool level_init);
 
     void update(bool level);
 
 private:
-    bool invert_pin;
-    void (InputPin::*update_func)(bool level);
-    int32_t limit;
-    void *out_dst;
+    bool prev_level;
+    bool invert_pin       = false;
+    void (InputPin::*update_func)(bool level) = &InputPin::nop;
+    uint32_t limit_ma     = 0;
+    uint8_t *out_dst      = nullptr;
+    uint32_t rising_mode  = UINT32_MAX;
+    uint32_t falling_mode = UINT32_MAX;
 
     void nop(bool level);
     void block_charging(bool level);
-    void switch_excess_charging(bool level);
     void limit_max_current(bool level);
-    void override_grid_draw(bool level);
+    void switch_mode(bool level);
 };

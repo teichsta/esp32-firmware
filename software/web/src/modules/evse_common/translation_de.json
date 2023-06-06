@@ -9,18 +9,17 @@
             "error": "Fehler",
             "configured_charging_current": "Konfigurierter Ladestrom",
             "allowed_charging_current": "Erlaubter Ladestrom",
-            "charging_current_minimum": "6 A",
-            "charging_current_maximum": "Max",
             "charge_control": "Ladesteuerung",
-            "auto_start_charging": "Autostart",
             "start_charging": "Start",
             "stop_charging": "Stop"
         },
         "navbar": {
-            "evse": "Ladecontroller"
+            "evse": "Ladestatus",
+            "evse_settings": "Ladeeinstellungen"
         },
         "content": {
-            "evse": "Ladecontroller (EVSE)",
+            "status": "Ladestatus",
+            "settings": "Ladeeinstellungen",
             "iec_state": "IEC-61851-Zustand",
             "iec_state_a": "A (getrennt)",
             "iec_state_b": "B (verbunden)",
@@ -58,6 +57,7 @@
             "jumper_config_software": "Software",
             "jumper_config_unconfigured": "Unkonfiguriert",
             "evse_version": "Hardware-Version des Ladecontrollers",
+            "evse_fw_version": "Firmware-Version des Ladecontrollers",
             "charging_current": "Ladestromgrenzen",
             "charging_current_muted": "Minimum der Ladestromgrenzen",
             "reset_slot": "Freigeben",
@@ -83,7 +83,9 @@
             "debug_description": "Ladeprotokoll erstellen",
             "debug_description_muted": "zur Diagnose bei Ladeproblemen",
 
-            "settings": "Einstellungen",
+            "auto_start_description": "Manuelle Ladefreigabe",
+            "auto_start_description_muted": "<a href=\"{{{manual_url}}}\">siehe Betriebsanleitung für Details</a>",
+            "auto_start_enable": "Erzwingt dass Ladevorgänge immer über das Webinterface, die API oder (je nach Tastereinstellung) den Taster manuell gestartet werden müssen.",
 
             "external_description": "Externe Steuerung",
             "external_description_muted": "<a href=\"https://www.warp-charger.com/evcc.html?v=2\">siehe Einrichtungs-Tutorial für Details</a>",
@@ -99,23 +101,31 @@
             "reflash_evse": "Neu flashen",
             "charging_time": "Lädt seit",
 
+            "meter_monitoring": "Zählerüberwachung",
+            "meter_monitoring_desc": "Überwacht den Stromzähler und blockiert Ladevorgänge im Falle eines Defekts.",
+
+            "enable_led_api": "Status-LED Steuerung",
+            "enable_led_api_desc": "Erlaubt die externe Steuerung der Status-LED.",
+
             "slot_0": "Zuleitung",
             "slot_1": "Typ-2-Ladekabel",
             "slot_2": "Abschalteingang",
             "slot_3": "Konfigurierbarer Eingang",
-            "slot_4": "Autostart oder Taster",
+            "slot_4": "Manuelle Ladefreigabe",
             "slot_5": "Konfiguration",
             "slot_6": "Benutzer",
             "slot_7": "Lastmanagement",
             "slot_8": "Externe Steuerung",
-            "slot_9": "Modbus TCP",
+            "slot_9": "Modbus TCP-Strom",
             "slot_10": "Modbus TCP-Freigabe",
-            "slot_11": "OCPP"
+            "slot_11": "OCPP",
+            "slot_12": "Energie-/Zeitlimit",
+            "slot_13": "Zählerüberwachung"
         },
         "script": {
             "error_code": "Fehlercode",
             "set_charging_current_failed": "Konnte Ladestrom nicht setzen",
-            "auto_start_charging_update": "Lade-Autostart setzen fehlgeschlagen.",
+            "auto_start_charging_update": "Manuelle Ladefregabe (de)aktivieren fehlgeschlagen.",
             "start_charging_failed": "Ladestart auslösen fehlgeschlagen",
             "stop_charging_failed": "Ladestop auslösen fehlgeschlagen",
             "tab_close_warning": "Die Aufzeichnung des Ladecontroller-Logs wird abgebrochen, wenn der Tab geschlossen wird.",
@@ -150,7 +160,11 @@
             "slot_8": "externe Steuerung",
             "slot_9": "Modbus TCP",
             "slot_10": "Modbus TCP-Freigabe",
-            "slot_11": "OCPP"
+            "slot_11": "OCPP",
+            "slot_12": "Energie-/Zeitlimit",
+            "slot_13": "Zählerüberwachung",
+
+            "reboot_content_changed": "Ladeeinstellungen"
         }
     }
 }

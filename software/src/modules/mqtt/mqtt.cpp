@@ -63,6 +63,8 @@ void Mqtt::pre_setup()
 
     mqtt_state = Config::Object({
         {"connection_state", Config::Int(0)},
+        {"connection_start", Config::Uint(0)},
+        {"connection_end", Config::Uint32(0)},
         {"last_error", Config::Int(0)}
     });
 }
@@ -91,25 +93,6 @@ void Mqtt::addCommand(size_t commandIdx, const CommandRegistration &reg)
     }
     if (req_size > (MQTT_RECV_BUFFER_SIZE - MQTT_RECV_BUFFER_HEADROOM))
         logger.printfln("MQTT: Recv buf is %u bytes. %s requires %u. Maybe bump MQTT_RECV_BUFFER_SIZE?", MQTT_RECV_BUFFER_SIZE, reg.path.c_str(), req_size);
-
-    if (mqtt_state.get("connection_state")->asInt() != (int)MqttConnectionState::CONNECTED)
-        return;
-
-    subscribe_with_prefix(reg.path, [reg, commandIdx](char *payload, size_t payload_len){
-        const String &reason = api.getCommandBlockedReason(commandIdx);
-        if (reason != "") {
-            logger.printfln("MQTT: Command %s is blocked: %s", reg.path.c_str(), reason.c_str());
-            return;
-        }
-
-        String error = reg.config->update_from_cstr(payload, payload_len);
-        if(error == "") {
-            task_scheduler.scheduleOnce([reg](){reg.callback();}, 0);
-            return;
-        }
-
-        logger.printfln("MQTT: Failed to update %s from MQTT payload: %s", reg.path.c_str(), error.c_str());
-    }, reg.is_action);
 }
 
 void Mqtt::addState(size_t stateIdx, const StateRegistration &reg)
@@ -119,23 +102,18 @@ void Mqtt::addState(size_t stateIdx, const StateRegistration &reg)
 
 void Mqtt::addRawCommand(size_t rawCommandIdx, const RawCommandRegistration &reg)
 {
-    if (mqtt_state.get("connection_state")->asInt() != (int)MqttConnectionState::CONNECTED)
-        return;
 
-    subscribe_with_prefix(reg.path, [reg](char *payload, size_t payload_len){
-        String error = reg.callback(payload, payload_len);
-        if(error == "") {
-            return;
-        }
+}
 
-        logger.printfln("MQTT: Failed to update %s from MQTT payload: %s", reg.path.c_str(), error.c_str());
-    }, reg.is_action);
+void Mqtt::addResponse(size_t responseIdx, const ResponseRegistration &reg)
+{
 }
 
 void Mqtt::publish_with_prefix(const String &path, const String &payload)
 {
     const String &prefix = mqtt_config_in_use.get("global_topic_prefix")->asString();
     String topic = prefix + "/" + path;
+    // Retain messages because we only send on change.
     publish(topic, payload, true);
 }
 
@@ -171,6 +149,9 @@ void Mqtt::wifiAvailable()
 
 void Mqtt::onMqttConnect()
 {
+    last_connected_ms = millis();
+    mqtt_state.get("connection_start")->updateUint(last_connected_ms);
+    was_connected = true;
     logger.printfln("MQTT: Connected to broker.");
     this->mqtt_state.get("connection_state")->updateInt((int)MqttConnectionState::CONNECTED);
 
@@ -190,21 +171,44 @@ void Mqtt::onMqttConnect()
 #if MODULE_MQTT_METER_AVAILABLE()
     mqtt_meter.onMqttConnect();
 #endif
+#if MODULE_EM_PV_FAKER_AVAILABLE()
+    em_pv_faker.onMqttConnect();
+#endif
 #if MODULE_MQTT_AUTO_DISCOVERY_AVAILABLE()
     mqtt_auto_discovery.onMqttConnect();
 #endif
+
+    const String &prefix = mqtt_config_in_use.get("global_topic_prefix")->asString();
+    String topic = prefix + "/#";
+    esp_mqtt_client_unsubscribe(client, topic.c_str());
+    esp_mqtt_client_subscribe(client, topic.c_str(), 0);
 }
 
 void Mqtt::onMqttDisconnect()
 {
     this->mqtt_state.get("connection_state")->updateInt((int)MqttConnectionState::NOT_CONNECTED);
     logger.printfln("MQTT: Disconnected from broker.");
+    if (was_connected) {
+        was_connected = false;
+        uint32_t now = millis();
+        uint32_t connected_for = now - last_connected_ms;
+        mqtt_state.get("connection_end")->updateUint(now);
+        if (connected_for < 0x7FFFFFFF) {
+            logger.printfln("MQTT: Was connected for %u seconds.", connected_for / 1000);
+        } else {
+            logger.printfln("MQTT: Was connected for a long time.");
+        }
+    }
 }
 
 void Mqtt::onMqttMessage(char *topic, size_t topic_len, char *data, size_t data_len, bool retain)
 {
 #if MODULE_MQTT_METER_AVAILABLE()
     if (mqtt_meter.onMqttMessage(topic, topic_len, data, data_len, retain))
+        return;
+#endif
+#if MODULE_EM_PV_FAKER_AVAILABLE()
+    if (em_pv_faker.onMqttMessage(topic, topic_len, data, data_len, retain))
         return;
 #endif
 #if MODULE_MQTT_AUTO_DISCOVERY_AVAILABLE()
@@ -227,7 +231,68 @@ void Mqtt::onMqttMessage(char *topic, size_t topic_len, char *data, size_t data_
         return;
     }
 
-    logger.printfln("MQTT: Received message on unknown topic '%.*s'. data_len=%i", topic_len, topic, data_len);
+    const String &prefix = this->mqtt_config_in_use.get("global_topic_prefix")->asString();
+    if (topic_len < prefix.length() + 1) // + 1 because we will check for the / between the prefix and the topic.
+        return;
+    if (memcmp(topic, prefix.c_str(), prefix.length()) != 0)
+        return;
+    if (topic[prefix.length()] != '/')
+        return;
+
+    topic += prefix.length() + 1;
+    topic_len -= prefix.length() + 1;
+
+
+    for (auto &reg : api.commands) {
+        if (topic_len != reg.path.length() || memcmp(topic, reg.path.c_str(), topic_len) != 0)
+            continue;
+
+        if (retain && reg.is_action) {
+            logger.printfln("MQTT: Topic %s is an action. Ignoring retained message.", reg.path.c_str());
+            return;
+        }
+
+        String error = reg.config->update_from_cstr(data, data_len);
+        if(error == "") {
+            task_scheduler.scheduleOnce([reg](){reg.callback();}, 0);
+            return;
+        }
+
+        logger.printfln("MQTT: Failed to update %s from MQTT payload: %s", reg.path.c_str(), error.c_str());
+        return;
+    }
+
+    for (auto &reg : api.raw_commands) {
+        if (topic_len != reg.path.length() || memcmp(topic, reg.path.c_str(), topic_len) != 0)
+            continue;
+
+        if (retain && reg.is_action) {
+            logger.printfln("MQTT: Topic %s is an action. Ignoring retained message.", reg.path.c_str());
+            return;
+        }
+
+        String error = reg.callback(data, data_len);
+        if(error == "") {
+            return;
+        }
+
+        logger.printfln("MQTT: Failed to update %s from MQTT payload: %s", reg.path.c_str(), error.c_str());
+        return;
+    }
+
+    // Don't print error message on state topics, this could be one of our own messages.
+    for (auto &reg : api.states) {
+        if (topic_len != reg.path.length() || memcmp(topic, reg.path.c_str(), topic_len) != 0)
+            continue;
+        return;
+    }
+
+    // Don't print error message if this packet was received because it was retained (as opposed to a newly published message)
+    // The spec says:
+    // It MUST set the RETAIN flag to 0 when a PUBLISH Packet is sent to a Client
+    // because it matches an established subscription regardless of how the flag was set in the message it received [MQTT-3.3.1-9].
+    if (!retain)
+        logger.printfln("MQTT: Received message on unknown topic '%.*s'. data_len=%i", topic_len, topic, data_len);
 }
 
 static char err_buf[64] = {0};
@@ -337,6 +402,8 @@ void Mqtt::setup()
 #endif
     }
 
+    mqtt_config_in_use = mqtt_config;
+
     if (!mqtt_config.get("enable_mqtt")->asBool()) {
         initialized = true;
         return;
@@ -350,8 +417,6 @@ void Mqtt::setup()
     esp_log_level_set("TRANSPORT", ESP_LOG_NONE);
     esp_log_level_set("OUTBOX", ESP_LOG_NONE);
 
-    mqtt_config_in_use = mqtt_config;
-
     esp_mqtt_client_config_t mqtt_cfg = {};
 
     mqtt_cfg.host = mqtt_config_in_use.get("broker_host")->asEphemeralCStr();
@@ -360,11 +425,10 @@ void Mqtt::setup()
     mqtt_cfg.username = mqtt_config_in_use.get("broker_username")->asEphemeralCStr();
     mqtt_cfg.password = mqtt_config_in_use.get("broker_password")->asEphemeralCStr();
     mqtt_cfg.buffer_size = MQTT_RECV_BUFFER_SIZE;
-    mqtt_cfg.network_timeout_ms = 100;
+    mqtt_cfg.network_timeout_ms = 1000;
 
     client = esp_mqtt_client_init(&mqtt_cfg);
     esp_mqtt_client_register_event(client, (esp_mqtt_event_id_t)ESP_EVENT_ANY_ID, mqtt_event_handler, this);
-
 
     initialized = true;
 }
@@ -373,8 +437,4 @@ void Mqtt::register_urls()
 {
     api.addPersistentConfig("mqtt/config", &mqtt_config, {"broker_password"}, 1000);
     api.addState("mqtt/state", &mqtt_state, {}, 1000);
-}
-
-void Mqtt::loop()
-{
 }

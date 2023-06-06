@@ -28,6 +28,7 @@
 #include "web_server.h"
 #include "modules.h"
 
+extern uint32_t local_uid_num;
 extern bool firmware_update_allowed;
 
 #define SLOT_ACTIVE(x) ((bool)(x & 0x01))
@@ -207,6 +208,12 @@ void EVSE::pre_setup()
         {"enabled", Config::Bool(false)}
     });
     evse_boost_mode_update = evse_boost_mode;
+
+    evse_require_meter_enabled = Config::Object({
+        {"enabled", Config::Bool(false)}
+    });
+
+    evse_require_meter_enabled_update = evse_require_meter_enabled;
 }
 
 bool EVSE::apply_slot_default(uint8_t slot, uint16_t current, bool enabled, bool clear)
@@ -293,6 +300,15 @@ void EVSE::apply_defaults()
         tf_evse_set_charging_slot(&device, CHARGING_SLOT_CHARGE_MANAGER, 0, cm_enabled, true);
 
     // Slot 8 (external) is controlled via API, no need to change anything here
+
+    // Disabling all unused charging slots.
+    for (int i = CHARGING_SLOT_COUNT; i < CHARGING_SLOT_COUNT_SUPPORTED_BY_EVSE; i++) {
+        bool active;
+        is_in_bootloader(tf_evse_get_charging_slot_default(&device, i, NULL, &active, NULL));
+        if (active)
+            is_in_bootloader(tf_evse_set_charging_slot_default(&device, i, 32000, false, false));
+        is_in_bootloader(tf_evse_set_charging_slot_active(&device, i, false));
+    }
 }
 
 void EVSE::factory_reset()
@@ -312,9 +328,8 @@ void EVSE::get_data_storage(uint8_t page, uint8_t *data)
 
 void EVSE::set_indicator_led(int16_t indication, uint16_t duration, uint8_t *ret_status)
 {
-    tf_evse_set_indicator_led(&device, indication, duration, status);
+    tf_evse_set_indicator_led(&device, indication, duration, ret_status);
 }
-
 
 void EVSE::setup()
 {
@@ -504,6 +519,17 @@ void EVSE::set_modbus_enabled(bool enabled)
     is_in_bootloader(tf_evse_set_charging_slot_max_current(&device, CHARGING_SLOT_MODBUS_TCP_ENABLE, enabled ? 32000 : 0));
 }
 
+
+void EVSE::set_charge_limits_slot(uint16_t current, bool enabled)
+{
+    is_in_bootloader(tf_evse_set_charging_slot(&device, CHARGING_SLOT_CHARGE_LIMITS, current, enabled, true));
+}
+/*
+void EVSE::set_charge_time_restriction_slot(uint16_t current, bool enabled)
+{
+    is_in_bootloader(tf_evse_set_charging_slot(&device, CHARGING_SLOT_TIME_RESTRICTION, current, enabled, true));
+}
+*/
 void EVSE::set_ocpp_current(uint16_t current)
 {
      is_in_bootloader(tf_evse_set_charging_slot_max_current(&device, CHARGING_SLOT_OCPP, current));
@@ -514,11 +540,47 @@ uint16_t EVSE::get_ocpp_current()
     return evse_slots.get(CHARGING_SLOT_OCPP)->get("max_current")->asUint();
 }
 
-void EVSE::register_urls()
-{
-    if (!device_found)
+void EVSE::set_require_meter_blocking(bool blocking) {
+    is_in_bootloader(tf_evse_set_charging_slot_max_current(&device, CHARGING_SLOT_REQUIRE_METER, blocking ? 0 : 32000));
+}
+
+void EVSE::set_require_meter_enabled(bool enabled) {
+    if (!initialized)
         return;
 
+    apply_slot_default(CHARGING_SLOT_REQUIRE_METER, 0, enabled, false);
+    is_in_bootloader(tf_evse_set_charging_slot_active(&device, CHARGING_SLOT_REQUIRE_METER, enabled));
+}
+
+bool EVSE::get_require_meter_blocking() {
+    uint16_t current = 0;
+    bool enabled = get_require_meter_enabled();
+    if (!enabled)
+        return false;
+
+    is_in_bootloader(tf_evse_get_charging_slot(&device, CHARGING_SLOT_REQUIRE_METER, &current, &enabled, nullptr));
+    return enabled && current == 0;
+}
+
+bool EVSE::get_require_meter_enabled() {
+    return evse_require_meter_enabled.get("enabled")->asBool();
+}
+
+void EVSE::check_debug()
+{
+    task_scheduler.scheduleOnce([this](){
+        if (deadline_elapsed(last_debug_check + 60000) && debug == true)
+        {
+            logger.printfln("Debug log creation canceled because no continue call was received for more than 60 seconds.");
+            debug = false;
+        }
+        else if (debug == true)
+            check_debug();
+    }, 70000);
+}
+
+void EVSE::register_urls()
+{
 #if MODULE_CM_NETWORKING_AVAILABLE()
     cm_networking.register_client([this](uint16_t current, bool cp_disconnect_requested) {
         set_managed_current(current);
@@ -537,6 +599,7 @@ void EVSE::register_urls()
         }
 
         cm_networking.send_client_update(
+            local_uid_num,
             evse_state.get("iec61851_state")->asUint(),
             evse_state.get("charger_state")->asUint(),
             evse_state.get("error_state")->asUint(),
@@ -586,14 +649,24 @@ void EVSE::register_urls()
 #if MODULE_WS_AVAILABLE()
     server.on("/evse/start_debug", HTTP_GET, [this](WebServerRequest request) {
         task_scheduler.scheduleOnce([this](){
+            logger.printfln("Start debug");
+            last_debug_check = millis();
+            check_debug();
             ws.pushRawStateUpdate(this->get_evse_debug_header(), "evse/debug_header");
             debug = true;
         }, 0);
         return request.send(200);
     });
 
+    server.on("/evse/continue_debug", HTTP_GET, [this](WebServerRequest request) {
+        logger.printfln("Debug wd reset");
+        last_debug_check = millis();
+        return request.send(200);
+    });
+
     server.on("/evse/stop_debug", HTTP_GET, [this](WebServerRequest request){
         task_scheduler.scheduleOnce([this](){
+            logger.printfln("Stop debug");
             debug = false;
         }, 0);
         return request.send(200);
@@ -781,7 +854,6 @@ void EVSE::register_urls()
             resistance_880
             ));
     }, true);
-
 
     this->DeviceModule::register_urls();
 }
@@ -1029,6 +1101,8 @@ void EVSE::update_all_data()
     evse_external_defaults.get("current")->updateUint(external_default_current);
     evse_external_defaults.get("clear_on_disconnect")->updateBool(external_default_clear_on_disconnect);
 
+    evse_require_meter_enabled.get("enabled")->updateBool(SLOT_ACTIVE(active_and_clear_on_disconnect[CHARGING_SLOT_REQUIRE_METER]));
+
     // get_user_calibration
     evse_user_calibration.get("user_calibration_active")->updateBool(user_calibration_active);
     evse_user_calibration.get("voltage_diff")->updateInt(voltage_diff);
@@ -1040,7 +1114,7 @@ void EVSE::update_all_data()
         evse_user_calibration.get("resistance_880")->get(i)->updateInt(resistance_880[i]);
 
 #if MODULE_WATCHDOG_AVAILABLE()
-    static size_t watchdog_handle = watchdog.add("evse_all_data", "EVSE not reachable", 10 * 60 * 1000);
+    static size_t watchdog_handle = watchdog.add("evse_all_data", "EVSE not reachable");
     watchdog.reset(watchdog_handle);
 #endif
 }

@@ -20,25 +20,25 @@
 #pragma once
 
 #include "config.h"
+
 #include <mutex>
 
-class NTP
+#include "module.h"
+
+class NTP final : public IModule
 {
 private:
-    struct timeval last_sync;
+    struct timeval last_sync{};
 
     String ntp_server1;
     String ntp_server2;
 
 public:
     NTP(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
     void set_synced();
-
-    bool initialized = false;
 
     std::mutex mtx;
     uint32_t sync_counter = 0;

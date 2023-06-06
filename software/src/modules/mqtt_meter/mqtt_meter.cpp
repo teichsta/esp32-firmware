@@ -54,10 +54,6 @@ void MqttMeter::register_urls()
     api.addPersistentConfig("mqtt/meter_config", &config, {}, 1000);
 }
 
-void MqttMeter::loop()
-{
-}
-
 void MqttMeter::onMqttConnect()
 {
     if (!enabled)
@@ -77,7 +73,7 @@ bool MqttMeter::onMqttMessage(char *topic, size_t topic_len, char *data, size_t 
     }
 
     if (retain) {
-        logger.printfln("mqtt_meter: Ignoring retained message.");
+        // Ignoring retained message. Need fresh data for the meter.
         // Even if we ignore the data, return true because we consumed the message.
         return true;
     }
@@ -90,12 +86,12 @@ bool MqttMeter::onMqttMessage(char *topic, size_t topic_len, char *data, size_t 
     }
 
     uint32_t meter_type = meter.state.get("type")->asUint();
-    if (meter_type != METER_TYPE_MQTT) {
+    if (meter_type != METER_TYPE_CUSTOM_BASIC) {
         if (meter_type != METER_TYPE_NONE) {
             logger.printfln("mqtt_meter: Detected presence of a conflicting meter, type %u. The MQTT meter should be disabled.", meter_type);
             return true;
         }
-        meter.updateMeterState(2, METER_TYPE_MQTT);
+        meter.updateMeterState(2, METER_TYPE_CUSTOM_BASIC);
     }
 
     float power      = doc["power"     ].as<float>();

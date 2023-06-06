@@ -27,18 +27,7 @@
 #include "task_scheduler.h"
 #include "modules.h"
 
-#if MODULE_EVSE_AVAILABLE()
-#include "bindings/bricklet_evse.h"
-#endif
-#if MODULE_EVSE_V2_AVAILABLE()
-#include "bindings/bricklet_evse_v2.h"
-#endif
-
-#if MODULE_ESP32_ETHERNET_BRICK_AVAILABLE()
 #define AUTHORIZED_TAG_LIST_LENGTH 16
-#else
-#define AUTHORIZED_TAG_LIST_LENGTH 8
-#endif
 
 #define TOKEN_LIFETIME_MS 30000
 #define DETECTION_THRESHOLD_MS 1000
@@ -179,10 +168,12 @@ void NFC::handle_event(tag_info_t *tag, bool found, bool injected)
             // Found a new authorized tag. Create/overwrite auth token. Overwrite blink state even if we previously saw a not authorized tag.
             auth_token = idx;
             auth_token_seen = millis();
-            users.set_blink_state(IND_ACK);
+#if MODULE_EVSE_LED_AVAILABLE()
+            evse_led.set_module(EvseLed::Blink::Ack, 2000);
+#endif
             users.trigger_charge_action(user_id, injected ? CHARGE_TRACKER_AUTH_TYPE_NFC_INJECTION : CHARGE_TRACKER_AUTH_TYPE_NFC, Config::Object({
                     {"tag_type", Config::Uint8(tag->tag_type)},
-                    {"tag_id", Config::Str(tag->tag_id)}}).value,
+                    {"tag_id", Config::Str(tag->tag_id, 0, 30)}}).value,
                     injected ? tag_injection_action : TRIGGER_CHARGE_ANY);
 #if MODULE_OCPP_AVAILABLE()
             ocpp.on_tag_seen(tag->tag_id);
@@ -195,10 +186,9 @@ void NFC::handle_event(tag_info_t *tag, bool found, bool injected)
 #if MODULE_OCPP_AVAILABLE()
         ocpp.on_tag_seen(tag->tag_id);
 #endif
-        // Found a not authorized tag. Blink NACK but only if we did not see an authorized token
-        if (users.get_blink_state() == -1) {
-            users.set_blink_state(IND_NACK);
-        }
+#if MODULE_EVSE_LED_AVAILABLE()
+        evse_led.set_module(EvseLed::Blink::Nack, 2000);
+#endif
     }
 }
 
@@ -342,9 +332,6 @@ void NFC::setup()
 
 void NFC::register_urls()
 {
-    if (!device_found)
-        return;
-
     api.addState("nfc/seen_tags", &seen_tags, {}, 1000);
     api.addPersistentConfig("nfc/config", &config, {}, 1000);
     api.addCommand("nfc/inject_tag", &inject_tag, {}, [this](){

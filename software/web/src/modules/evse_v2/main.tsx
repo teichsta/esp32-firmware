@@ -26,7 +26,7 @@ import { h, render, Fragment, Component} from "preact";
 import { __, translate_unchecked } from "../../ts/translation";
 import { PageHeader } from "../../ts/components/page_header";
 
-
+import { ConfigComponent } from "src/ts/components/config_component";
 import { IndicatorGroup } from "../../ts/components/indicator_group";
 import { FormRow } from "../../ts/components/form_row";
 import { FormSeparator } from "../../ts/components/form_separator";
@@ -37,172 +37,75 @@ import { Button} from "react-bootstrap";
 import { InputSelect } from "src/ts/components/input_select";
 import { CollapsedSection } from "src/ts/components/collapsed_section";
 import { EVSE_SLOT_EXTERNAL, EVSE_SLOT_GLOBAL } from "../evse_common/api";
+import { DebugLogger } from "../../ts/components/debug_logger";
+import { ConfigForm } from "src/ts/components/config_form";
+import { InputFloat } from "src/ts/components/input_float";
 
 interface EVSEState {
     state: API.getType['evse/state'];
     ll_state: API.getType['evse/low_level_state'];
     hardware_cfg: API.getType['evse/hardware_configuration'];
+    slots: Readonly<API.getType['evse/slots']>;
+    control_pilot_disconnect: API.getType['evse/control_pilot_disconnect'];
+}
+
+interface EVSESSettingsState {
     button_cfg: API.getType['evse/button_configuration']
     slots: Readonly<API.getType['evse/slots']>;
     gpio_cfg: API.getType['evse/gpio_configuration'];
     ev_wakeup: API.getType['evse/ev_wakeup'];
     boost_mode: API.getType['evse/boost_mode'];
-    control_pilot_disconnect: API.getType['evse/control_pilot_disconnect'];
-    debug_running: boolean;
-    debug_status: string;
+    auto_start_charging: API.getType['evse/auto_start_charging'];
+    require_meter_enabled: API.getType['require_meter/config'];
+    led_config: API.getType['evse/led_config'];
+    meter_abs: number
+    evse_uptime: number
 }
+
+type ChargeLimitsConfig = API.getType["charge_limits/default_limits"];
 
 let toDisplayCurrent = (x: number) => util.toLocaleFixed(x / 1000.0, 3) + " A"
 
 export class EVSEV2 extends Component<{}, EVSEState> {
-    debug_log = "";
 
     constructor() {
         super();
 
-        util.eventTarget.addEventListener('evse/state', () => {
+        util.addApiEventListener('evse/state', () => {
             this.setState({state: API.get('evse/state')});
         });
 
-        util.eventTarget.addEventListener('evse/low_level_state', () => {
+        util.addApiEventListener('evse/low_level_state', () => {
             this.setState({ll_state: API.get('evse/low_level_state')});
         });
 
-        util.eventTarget.addEventListener('evse/hardware_configuration', () => {
+        util.addApiEventListener('evse/hardware_configuration', () => {
             this.setState({hardware_cfg: API.get('evse/hardware_configuration')});
         });
 
-        util.eventTarget.addEventListener('evse/slots', () => {
+        util.addApiEventListener('evse/slots', () => {
             this.setState({slots: API.get('evse/slots')});
         });
 
-        util.eventTarget.addEventListener('evse/gpio_configuration', () => {
-            this.setState({gpio_cfg: API.get('evse/gpio_configuration')});
-        });
-
-        util.eventTarget.addEventListener('evse/button_configuration', () => {
-            this.setState({button_cfg: API.get('evse/button_configuration')});
-        });
-
-        util.eventTarget.addEventListener('evse/ev_wakeup', () => {
-            this.setState({ev_wakeup: API.get('evse/ev_wakeup')});
-        });
-
-        util.eventTarget.addEventListener('evse/boost_mode', () => {
-            this.setState({boost_mode: API.get('evse/boost_mode')});
-        });
-
-        util.eventTarget.addEventListener('evse/control_pilot_disconnect', () => {
+        util.addApiEventListener('evse/control_pilot_disconnect', () => {
             this.setState({control_pilot_disconnect: API.get('evse/control_pilot_disconnect')});
         });
-
-        util.eventTarget.addEventListener("evse/debug_header", (e) => {
-            this.debug_log += e.data + "\n";
-        }, false);
-
-        util.eventTarget.addEventListener("evse/debug", (e) => {
-            this.debug_log += e.data + "\n";
-        }, false);
-    }
-
-    async get_debug_report_and_event_log() {
-        this.setState({debug_status: __("evse.script.loading_debug_report")});
-
-        try {
-            this.debug_log += await util.download("/debug_report").then(blob => blob.text());
-            this.debug_log += "\n\n";
-        } catch {
-            this.setState({debug_running: false, debug_status: __("evse.script.loading_debug_report_failed")});
-            return false;
-        }
-
-        this.setState({debug_status: __("evse.script.loading_event_log")});
-
-        try {
-            this.debug_log += await util.download("/event_log").then(blob => blob.text());
-            this.debug_log += "\n";
-        } catch {
-            this.setState({debug_running: false, debug_status: __("evse.script.loading_event_log_failed")});
-            return false;
-        }
-
-        return true;
-    }
-
-    async debug_start() {
-        this.debug_log = "";
-        this.setState({debug_running: true});
-
-        if (!await this.get_debug_report_and_event_log())
-            return;
-
-        this.setState({debug_status: __("evse.script.starting_debug")});
-
-        try {
-            await util.download("/evse/start_debug");
-        } catch {
-            this.setState({debug_running: false, debug_status: __("evse.script.starting_debug_failed")});
-            return;
-        }
-
-        this.setState({debug_status: __("evse.script.debug_running")});
-    }
-
-    async debug_stop() {
-        this.setState({debug_running: false});
-
-        try {
-            await util.download("/evse/stop_debug");
-        } catch {
-            this.setState({debug_status: __("evse.script.debug_stop_failed")});
-            return;
-        }
-
-        this.debug_log += "\n\n";
-
-        this.setState({debug_status: __("evse.script.debug_stopped")});
-
-        if (!await this.get_debug_report_and_event_log())
-            return;
-
-        this.setState({debug_status: __("evse.script.debug_done")});
-
-        util.downloadToFile(this.debug_log, "evse-debug-log", "txt", "text/plain");
     }
 
     render(props: {}, s: Readonly<EVSEState>) {
-        if (!s || !s.slots)
+        if (!util.render_allowed() || !API.hasFeature("evse"))
             return (<></>);
 
         let {state,
             ll_state,
             hardware_cfg,
-            button_cfg,
-            slots,
-            gpio_cfg,
-            ev_wakeup,
-            boost_mode,
-            control_pilot_disconnect,
-            debug_running,
-            debug_status} = s;
+            slots,} = s;
 
         let min = Math.min(...slots.filter(s => s.active).map(s => s.max_current));
 
-        if (debug_running) {
-            window.onbeforeunload = (e: Event) => {
-                e.preventDefault();
-                // returnValue is not a boolean, but the string to be shown
-                // in the "are you sure you want to close this tab" message
-                // box. However this string is only shown in some browsers.
-                e.returnValue = __("evse.script.tab_close_warning") as any;
-            }
-        } else {
-            window.onbeforeunload = null;
-        }
-
         return (
             <>
-                <PageHeader title={__("evse.content.evse")} />
+                <PageHeader title={__("evse.content.status")} />
                     <FormRow label={__("evse.content.iec_state")}>
                         <IndicatorGroup
                             value={state.iec61851_state}
@@ -317,100 +220,6 @@ export class EVSEV2 extends Component<{}, EVSEState> {
                         <InputText value={util.format_timespan(Math.floor(ll_state.uptime / 1000.0))}/>
                     </FormRow>
 
-                    <FormSeparator heading={__("evse.content.settings")}/>
-
-                    <FormRow label={__("evse.content.external_description")} label_muted={__("evse.content.external_description_muted")}>
-                        <Switch desc={__("evse.content.external_enable")}
-                                checked={slots[EVSE_SLOT_EXTERNAL].active}
-                                onClick={async () => {
-                                    let inverted = !slots[EVSE_SLOT_EXTERNAL].active;
-                                    await API.save('evse/external_enabled', {"enabled": inverted}, __("evse.script.save_failed"));
-                                }}/>
-                    </FormRow>
-
-                    <FormRow label={__("evse.content.button_configuration")} label_muted={__("evse.content.button_configuration_muted")}>
-                        <InputSelect items={[
-                                        ["0",__("evse.content.button_configuration_deactivated")],
-                                        ["1",__("evse.content.button_configuration_start_charging")],
-                                        ["2",__("evse.content.button_configuration_stop_charging")],
-                                        ["3",__("evse.content.button_configuration_start_and_stop_charging")],
-                                    ]}
-                                value={button_cfg.button}
-                                onValue={async (v) => {
-                                    this.setState({button_cfg: {button: parseInt(v)}});
-                                    await API.save('evse/button_configuration', {"button": parseInt(v)}, __("evse.script.save_failed"))
-                                }}
-                        />
-                    </FormRow>
-
-                    <FormRow label={__("evse.content.gpio_shutdown")} label_muted={__("evse.content.gpio_shutdown_muted")}>
-                        <InputSelect items={[
-                                        ["0",__("evse.content.gpio_shutdown_not_configured")],
-                                        ["1",__("evse.content.gpio_shutdown_on_open")],
-                                        ["2",__("evse.content.gpio_shutdown_on_close")],
-                                    ]}
-                                value={gpio_cfg.shutdown_input}
-                                onValue={async (v) => {
-                                    let cfg = {...API.get('evse/gpio_configuration')};
-                                    cfg.shutdown_input = parseInt(v);
-                                    this.setState({gpio_cfg: cfg});
-                                    await API.save('evse/gpio_configuration', cfg,
-                                        __("evse.script.gpio_configuration_failed"));
-                                }}
-                        />
-                    </FormRow>
-
-                    <FormRow label={__("evse.content.gpio_in")} label_muted={__("evse.content.gpio_in_muted")}>
-                        <InputSelect items={[
-                                        ["0",__("evse.content.not_configured")],
-                                        ["disabled",__("evse.content.todo")]
-                                    ]}
-                                value={gpio_cfg.input}
-                                onValue={async (v) => {
-                                    let cfg = {...API.get('evse/gpio_configuration')};
-                                    cfg.input = parseInt(v);
-                                    this.setState({gpio_cfg: cfg});
-                                    await API.save('evse/gpio_configuration', cfg,
-                                        __("evse.script.gpio_configuration_failed"));
-                                }}
-                        />
-                    </FormRow>
-
-                    <FormRow label={__("evse.content.gpio_out")} label_muted={__("evse.content.gpio_out_muted")}>
-                        <InputSelect items={[
-                                        ["0",__("evse.content.gpio_out_low")],
-                                        ["1",__("evse.content.gpio_out_high")],
-                                        ["disabled",__("evse.content.todo")],
-                                    ]}
-                                value={gpio_cfg.output}
-                                onValue={async (v) => {
-                                    let cfg = {...API.get('evse/gpio_configuration')};
-                                    cfg.output = parseInt(v);
-                                    this.setState({gpio_cfg: cfg});
-                                    await API.save('evse/gpio_configuration', cfg,
-                                        __("evse.script.gpio_configuration_failed"));
-                                }}
-                        />
-                    </FormRow>
-
-                    <FormRow label={__("evse.content.ev_wakeup_desc")} label_muted={__("evse.content.ev_wakeup_desc_muted")}>
-                        <Switch desc={__("evse.content.ev_wakeup")}
-                                checked={ev_wakeup.enabled}
-                                onClick={async () => {
-                                    let inverted = !ev_wakeup.enabled;
-                                    await API.save('evse/ev_wakeup', {"enabled": inverted}, __("evse.script.save_failed"));
-                                }}/>
-                    </FormRow>
-
-                    <FormRow label={__("evse.content.boost_mode_desc")} label_muted={__("evse.content.boost_mode_desc_muted")}>
-                        <Switch desc={__("evse.content.boost_mode")}
-                                checked={boost_mode.enabled}
-                                onClick={async () => {
-                                    let inverted = !boost_mode.enabled;
-                                    await API.save('evse/boost_mode', {"enabled": inverted}, __("evse.script.save_failed"));
-                                }}/>
-                    </FormRow>
-
                     {/*<FormRow label={__("evse.content.control_pilot_disconnect_desc")} label_muted={__("evse.content.control_pilot_disconnect_desc_muted")}>
                         <Switch desc={__("evse.content.control_pilot_disconnect")}
                                 checked={control_pilot_disconnect.disconnect}
@@ -506,19 +315,16 @@ export class EVSEV2 extends Component<{}, EVSEState> {
                         <InputText value={(hardware_cfg.evse_version / 10).toFixed(1)}/>
                     </FormRow>
 
+                    <FormRow label={__("evse.content.evse_fw_version")}>
+                        <InputText value={API.get("evse/identity").fw_version}/>
+                    </FormRow>
+
                     <FormRow label={__("evse.content.energy_meter_type")}>
                         <InputText value={translate_unchecked(`evse.script.meter_type_${hardware_cfg.energy_meter_type}`)}/>
                     </FormRow>
 
                     <FormSeparator heading={__("evse.content.debug")}/>
-
-                    <FormRow label={__("evse.content.debug_description")} label_muted={__("evse.content.debug_description_muted")}>
-                        <div class="input-group pb-2">
-                            <Button variant="primary" className="form-control rounded-right mr-2" onClick={() => {this.debug_start()}} disabled={debug_running}>{__("evse.content.debug_start")}</Button>
-                            <Button variant="primary" className="form-control rounded-left" onClick={() => {this.debug_stop()}} disabled={!debug_running}>{__("evse.content.debug_stop")}</Button>
-                        </div>
-                        <InputText value={debug_status}/>
-                    </FormRow>
+                    <DebugLogger prefix="evse" debugHeader="evse/debug_header" debug="evse/debug" translationPrefix="evse"/>
 
                     <CollapsedSection label={__("evse.content.low_level_state")}>
                         <FormRow label={__("evse.content.led_state")}>
@@ -595,8 +401,8 @@ export class EVSEV2 extends Component<{}, EVSEState> {
                             <Button variant="primary" className="form-control rounded-right mr-2" onClick={() => API.call('evse/reset', {}, "")}>{__("evse.content.reset_evse")}</Button>
                             <Button variant="primary" className="form-control rounded-left" onClick={() => API.call('evse/reflash', {}, "")}>{__("evse.content.reflash_evse")}</Button>
                         </div>
+                        <Button variant="primary" className="form-control" onClick={() => API.call('evse/trigger_dc_fault_test', {}, "")}>{__("evse.content.trigger_dc_fault_test")}</Button>
                         </FormRow>
-
                     </CollapsedSection>
             </>
         )
@@ -605,202 +411,272 @@ export class EVSEV2 extends Component<{}, EVSEState> {
 
 render(<EVSEV2 />, $('#evse')[0]);
 
-function update_evse_status_start_charging_button() {
-    let state = API.get('evse/state');
-    let slots = API.get('evse/slots');
+class EVSEV2Settings extends ConfigComponent<"charge_limits/default_limits", {}, EVSESSettingsState>
+{
+    constructor()
+    {
+        super("charge_limits/default_limits",
+            __("evse.script.save_failed"),
+            __("evse.script.reboot_content_changed"));
 
-    // It is not helpful to enable the button if auto-start is active, but we are blocked for some other reason.
-    $('#status_start_charging').prop("disabled", state.iec61851_state != 1 || slots[4].max_current != 0);
-}
+        util.addApiEventListener('evse/gpio_configuration', () => {
+            this.setState({gpio_cfg: API.get('evse/gpio_configuration')});
+        });
 
-function update_evse_state() {
-    let state = API.get('evse/state');
+        util.addApiEventListener('evse/button_configuration', () => {
+            this.setState({button_cfg: API.get('evse/button_configuration')});
+        });
 
-    util.update_button_group("btn_group_evse_state", state.charger_state);
+        util.addApiEventListener('evse/ev_wakeup', () => {
+            this.setState({ev_wakeup: API.get('evse/ev_wakeup')});
+        });
 
-    $('#status_stop_charging').prop("disabled", state.charger_state != 2 && state.charger_state != 3);
-}
+        util.addApiEventListener('evse/boost_mode', () => {
+            this.setState({boost_mode: API.get('evse/boost_mode')});
+        });
 
-let status_charging_current_dirty = false;
+        util.addApiEventListener('evse/auto_start_charging', () => {
+            this.setState({auto_start_charging: API.get('evse/auto_start_charging')});
+        });
+        util.addApiEventListener('evse/slots', () => {
+            this.setState({slots: API.get('evse/slots')});
+        })
 
+        util.addApiEventListener("meter/values", () => {
+            this.setState({meter_abs: API.get("meter/values").energy_abs});
+        })
 
-function set_charging_current(current: number) {
-    if (status_plus_minus_timeout != null) {
-        window.clearTimeout(status_plus_minus_timeout);
-        status_plus_minus_timeout = null;
+        util.addApiEventListener("evse/low_level_state", () => {
+            this.setState({evse_uptime: API.get("evse/low_level_state").uptime});
+        })
+
+        util.addApiEventListener("require_meter/config", () => {
+            this.setState({require_meter_enabled: API.get("require_meter/config")});
+        })
+
+        util.addApiEventListener("evse/led_config", () => {
+            this.setState({led_config: API.get("evse/led_config")});
+        })
     }
 
-    status_charging_current_dirty = false;
-    util.setNumericInput("status_charging_current", current / 1000, 3);
-
-    API.save('evse/global_current', {"current": current}, __("evse.script.set_charging_current_failed"));
-}
-
-
-function update_evse_auto_start_charging() {
-    let x = API.get('evse/auto_start_charging');
-
-    $('#status_auto_start_charging').prop("checked", x.auto_start_charging);
-}
-
-function set_auto_start_charging(auto_start_charging: boolean) {
-    API.save('evse/auto_start_charging', {"auto_start_charging": auto_start_charging}, __("evse.script.auto_start_charging_update"));
-}
-
-function start_charging() {
-    API.call('evse/start_charging', {}, __("evse.script.start_charging_failed"));
-}
-
-function stop_charging() {
-    API.call('evse/stop_charging', {}, __("evse.script.stop_charging_failed"));
-}
-
-function update_evse_slots() {
-    let slots = API.get('evse/slots');
-
-    let real_maximum = 32000;
-    for(let i = 0; i < slots.length; ++i) {
-        let s = slots[i];
-        if (s.active)
-            real_maximum = Math.min(real_maximum, s.max_current);
+    override async sendSave(t: "charge_limits/default_limits", cfg: EVSESSettingsState & ChargeLimitsConfig): Promise<void> {
+        await API.save('evse/auto_start_charging', {"auto_start_charging": this.state.auto_start_charging.auto_start_charging}, __("evse.script.save_failed"));
+        await API.save('evse/external_enabled', {"enabled": this.state.slots[EVSE_SLOT_EXTERNAL].active}, __("evse.script.save_failed"));
+        await API.save('evse/button_configuration', {"button": this.state.button_cfg.button}, __("evse.script.save_failed"));
+        await API.save('evse/gpio_configuration', this.state.gpio_cfg, __("evse.script.gpio_configuration_failed"));
+        await API.save('evse/ev_wakeup', {"enabled": this.state.ev_wakeup.enabled}, __("evse.script.save_failed"));
+        await API.save('evse/boost_mode', {"enabled": this.state.boost_mode.enabled}, __("evse.script.save_failed"));
+        await API.save('require_meter/config', {"config": this.state.require_meter_enabled.config}, __("evse.script.save_failed"));
+        await API.save('evse/led_config', this.state.led_config, __("evse.script.save_failed"));
+        super.sendSave(t, cfg);
     }
 
-    let theoretical_maximum = Math.min(slots[0].max_current, slots[1].max_current);
-    let theoretical_maximum_str = util.toLocaleFixed(theoretical_maximum / 1000.0, 0) + " A";
-    $('#status_charging_current').prop("max", theoretical_maximum / 1000);
-    $("#status_charging_current_maximum").on("click", () => set_charging_current(theoretical_maximum));
-    $('#status_charging_current_maximum').html(theoretical_maximum_str);
+    //TODO: Substitute hardcoded values after evse-reset-api is available.
 
-    if(!status_charging_current_dirty) {
-        let shown_current = Math.min(slots[EVSE_SLOT_GLOBAL].max_current, theoretical_maximum);
-        util.setNumericInput("status_charging_current", shown_current / 1000.0, 3);
+    override async sendReset(t: "charge_limits/default_limits"): Promise<void> {
+        await API.save('evse/auto_start_charging', {"auto_start_charging": true}, __("evse.script.save_failed"));
+        await API.save('evse/external_enabled', {"enabled": false}, __("evse.script.save_failed"));
+        await API.save('evse/button_configuration', {"button": 2}, __("evse.script.save_failed"));
+        await API.save('evse/gpio_configuration', {"input": 0, "output": 1, "shutdown_input": 0}, __("evse.script.gpio_configuration_failed"));
+        await API.save('evse/ev_wakeup', {"enabled": true}, __("evse.script.save_failed"));
+        await API.save('evse/boost_mode', {"enabled": false}, __("evse.script.save_failed"));
+        await API.reset('require_meter/config', __("evse.script.save_failed"));
+        await API.reset('evse/led_config', __("evse.script.save_failed"));
+        super.sendReset(t);
     }
 
-    if (real_maximum == 32000) {
-        $('#evse_status_allowed_charging_current').val(util.toLocaleFixed(real_maximum / 1000.0, 3) + " A");
-        return;
+    render(props: {}, s: EVSESSettingsState & ChargeLimitsConfig)
+    {
+        if (!util.render_allowed() || !API.hasFeature("evse"))
+            return <></>;
+
+        let {
+            button_cfg,
+            slots,
+            gpio_cfg,
+            ev_wakeup,
+            boost_mode,
+            auto_start_charging,
+            require_meter_enabled,
+            led_config} = s;
+
+        const has_meter = API.hasFeature("meter");
+
+        const energy_settings = <FormRow label={__("charge_limits.content.energy")} label_muted={__("charge_limits.content.energy_muted")}>
+        <InputSelect items={[
+            ["0", __("charge_limits.content.unlimited")],
+            ["5000", util.toLocaleFixed(5, 0) + " kWh"],
+            ["10000", util.toLocaleFixed(10, 0) + " kWh"],
+            ["15000", util.toLocaleFixed(15, 0) + " kWh"],
+            ["20000", util.toLocaleFixed(20, 0) + " kWh"],
+            ["25000", util.toLocaleFixed(25, 0) + " kWh"],
+            ["30000", util.toLocaleFixed(30, 0) + " kWh"],
+            ["40000", util.toLocaleFixed(40, 0) + " kWh"],
+            ["50000", util.toLocaleFixed(50, 0) + " kWh"],
+            ["60000", util.toLocaleFixed(60, 0) + " kWh"],
+            ["70000", util.toLocaleFixed(70, 0) + " kWh"],
+            ["80000", util.toLocaleFixed(80, 0) + " kWh"],
+            ["90000", util.toLocaleFixed(90, 0) + " kWh"],
+            ["100000", util.toLocaleFixed(100, 0) + " kWh"]
+        ]}
+        value={s.energy_wh}
+        onValue={(v) => this.setState({energy_wh: Number(v)})}/>
+    </FormRow>;
+
+        const require_meter = <FormRow label={__("evse.content.meter_monitoring")}>
+                                        <Switch desc={__("evse.content.meter_monitoring_desc")}
+                                            checked={require_meter_enabled.config == 2}
+                                            onClick={async () => {
+                                                this.setState({require_meter_enabled: {config: require_meter_enabled.config == 2 ? 1 : 2}});
+                                            }}/>
+                                    </FormRow>;
+
+        return <>
+                <ConfigForm id="evse_settings" title={__("evse.content.settings")} isModified={this.isModified()} onSave={this.save} onReset={this.reset} onDirtyChange={(d) => this.ignore_updates = d}>
+                    <FormRow label={__("evse.content.auto_start_description")} label_muted={__("evse.content.auto_start_description_muted")}>
+                        <Switch desc={__("evse.content.auto_start_enable")}
+                                checked={!auto_start_charging.auto_start_charging}
+                                onClick={async () => this.setState({auto_start_charging: {...auto_start_charging, auto_start_charging: !auto_start_charging.auto_start_charging}})}/>
+                    </FormRow>
+
+                    <FormRow label={__("evse.content.external_description")} label_muted={__("evse.content.external_description_muted")}>
+                        <Switch desc={__("evse.content.external_enable")}
+                                checked={slots[EVSE_SLOT_EXTERNAL].active}
+                                onClick={async () => {
+                                    let tmp = slots;
+                                    slots[EVSE_SLOT_EXTERNAL].active = !slots[EVSE_SLOT_EXTERNAL].active;
+                                    this.setState({slots: tmp});
+                                }}/>
+                    </FormRow>
+
+                    <FormRow label={__("evse.content.enable_led_api")}>
+                        <Switch onClick={async () => this.setState({led_config: {enable_api: !led_config.enable_api}})}
+                                checked={led_config.enable_api}
+                                desc={__("evse.content.enable_led_api_desc")}/>
+                    </FormRow>
+
+                    <FormRow label={__("evse.content.button_configuration")} label_muted={__("evse.content.button_configuration_muted")}>
+                        <InputSelect items={[
+                                        ["0",__("evse.content.button_configuration_deactivated")],
+                                        ["1",__("evse.content.button_configuration_start_charging")],
+                                        ["2",__("evse.content.button_configuration_stop_charging")],
+                                        ["3",__("evse.content.button_configuration_start_and_stop_charging")],
+                                    ]}
+                                value={button_cfg.button}
+                                onValue={async (v) => {
+                                    this.setState({button_cfg: {button: parseInt(v)}});
+                                }}
+                        />
+                    </FormRow>
+
+                    <FormRow label={__("evse.content.gpio_shutdown")} label_muted={__("evse.content.gpio_shutdown_muted")}>
+                        <InputSelect items={[
+                                        ["0",__("evse.content.gpio_shutdown_not_configured")],
+                                        ["1",__("evse.content.gpio_shutdown_on_open")],
+                                        ["2",__("evse.content.gpio_shutdown_on_close")],
+                                    ]}
+                                value={gpio_cfg.shutdown_input}
+                                onValue={async (v) => {
+                                    let cfg = gpio_cfg;
+                                    cfg.shutdown_input = parseInt(v);
+                                    this.setState({gpio_cfg: cfg});
+                                }}
+                        />
+                    </FormRow>
+
+                    <FormRow label={__("evse.content.gpio_in")} label_muted={__("evse.content.gpio_in_muted")}>
+                        <InputSelect items={[
+                                        ["0", __("evse.content.not_configured")],
+                                        ["1",  __("evse.content.active_low_blocked")],
+                                        ["2", __("evse.content.active_low_prefix")  + '6 A' + __("evse.content.active_low_suffix")],
+                                        ["3", __("evse.content.active_low_prefix")  + '8 A' + __("evse.content.active_low_suffix")],
+                                        ["4", __("evse.content.active_low_prefix")  + '10 A' + __("evse.content.active_low_suffix")],
+                                        ["5", __("evse.content.active_low_prefix")  + '13 A' + __("evse.content.active_low_suffix")],
+                                        ["6", __("evse.content.active_low_prefix")  + '16 A' + __("evse.content.active_low_suffix")],
+                                        ["7", __("evse.content.active_low_prefix")  + '20 A' + __("evse.content.active_low_suffix")],
+                                        ["8", __("evse.content.active_low_prefix")  + '25 A' + __("evse.content.active_low_suffix")],
+                                        ["9",  __("evse.content.active_high_blocked")],
+                                        ["10", __("evse.content.active_high_prefix")  + '6 A' + __("evse.content.active_high_suffix")],
+                                        ["11", __("evse.content.active_high_prefix")  + '8 A' + __("evse.content.active_high_suffix")],
+                                        ["12", __("evse.content.active_high_prefix")  + '10 A' + __("evse.content.active_high_suffix")],
+                                        ["13", __("evse.content.active_high_prefix")  + '13 A' + __("evse.content.active_high_suffix")],
+                                        ["14", __("evse.content.active_high_prefix")  + '16 A' + __("evse.content.active_high_suffix")],
+                                        ["15", __("evse.content.active_high_prefix")  + '20 A' + __("evse.content.active_high_suffix")],
+                                        ["16", __("evse.content.active_high_prefix")  + '25 A' + __("evse.content.active_high_suffix")],
+                                        ["disabled", __("evse.content.todo")]
+                                    ]}
+                                value={gpio_cfg.input}
+                                onValue={async (v) => {
+                                    let cfg = gpio_cfg;
+                                    cfg.input = parseInt(v);
+                                    this.setState({gpio_cfg: cfg});
+                                }}
+                        />
+                    </FormRow>
+
+                    <FormRow label={__("evse.content.gpio_out")} label_muted={__("evse.content.gpio_out_muted")}>
+                        <InputSelect items={[
+                                        ["0",__("evse.content.gpio_out_low")],
+                                        ["1",__("evse.content.gpio_out_high")],
+                                        ["disabled",__("evse.content.todo")],
+                                    ]}
+                                value={gpio_cfg.output}
+                                onValue={async (v) => {
+                                    let cfg = gpio_cfg;
+                                    cfg.output = parseInt(v);
+                                    this.setState({gpio_cfg: cfg});
+                                }}
+                        />
+                    </FormRow>
+
+                    <FormRow label={__("evse.content.ev_wakeup_desc")} label_muted={__("evse.content.ev_wakeup_desc_muted")}>
+                        <Switch desc={__("evse.content.ev_wakeup")}
+                                checked={ev_wakeup.enabled}
+                                onClick={async () => this.setState({ev_wakeup: {enabled: !ev_wakeup.enabled}})}/>
+                    </FormRow>
+
+                    <FormRow label={__("evse.content.boost_mode_desc")} label_muted={__("evse.content.boost_mode_desc_muted")}>
+                        <Switch desc={__("evse.content.boost_mode")}
+                                checked={boost_mode.enabled}
+                                onClick={async () => this.setState({boost_mode: {enabled: !boost_mode.enabled}})}/>
+                    </FormRow>
+
+                    {require_meter_enabled.config != 0 ? require_meter : <></>}
+
+                    <FormRow label={__("charge_limits.content.duration")} label_muted={__("charge_limits.content.duration_muted")}>
+                        <InputSelect items={[
+                            ["0", __("charge_limits.content.unlimited")],
+                            ["1", __("charge_limits.content.min15")],
+                            ["2", __("charge_limits.content.min30")],
+                            ["3", __("charge_limits.content.min45")],
+                            ["4", __("charge_limits.content.h1")],
+                            ["5", __("charge_limits.content.h2")],
+                            ["6", __("charge_limits.content.h3")],
+                            ["7", __("charge_limits.content.h4")],
+                            ["8", __("charge_limits.content.h6")],
+                            ["9", __("charge_limits.content.h8")],
+                            ["10", __("charge_limits.content.h12")]
+                        ]}
+                        value={s.duration}
+                        onValue={(v) => this.setState({duration: Number(v)})}/>
+                    </FormRow>
+                    {has_meter ? energy_settings : <></>}
+                </ConfigForm>
+        </>;
     }
-
-    let status_string = util.toLocaleFixed(real_maximum / 1000.0, 3) + " A " + __("evse.script.by") + " ";
-
-    let status_list = [];
-    for(let i = 0; i < slots.length; ++i) {
-        let s = slots[i];
-        if (s.active && s.max_current == real_maximum && real_maximum > 0)
-            $(`#slot_${i}`).css("border-left-color", "#ffc107");
-        if (!s.active || s.max_current != real_maximum)
-            continue;
-
-        status_list.push(translate_unchecked(`evse.script.slot_${i}`));
-    }
-
-    status_string += status_list.join(", ");
-
-    $('#evse_status_allowed_charging_current').val(status_string);
 }
 
-let status_plus_minus_timeout: number = null;
+render(<EVSEV2Settings/>, $('#evse-settings')[0]);
 
 export function init() {
-    $("#status_charging_current_minimum").on("click", () => set_charging_current(6000));
-    $("#status_charging_current_maximum").on("click", () => set_charging_current(32000));
-
-    $("#status_stop_charging").on("click", stop_charging);
-    $("#status_start_charging").on("click", start_charging);
-
-    $('#status_auto_start_charging').on("change", () => set_auto_start_charging($('#status_auto_start_charging').prop('checked')));
-
-    let input = $('#status_charging_current');
-
-    $('#evse_status_charging_current_form').on('submit', function (this: HTMLFormElement, event: Event) {
-        event.preventDefault();
-        event.stopPropagation();
-
-        if (this.checkValidity() === false) {
-            return;
-        }
-
-        set_charging_current(Math.round((input.val() as number) * 1000));
-    });
-
-
-    $('#status_charging_current_minus').on("click", () => {
-        let val: number = parseInt(input.val().toString());
-        let target = (val % 1 === 0) ? (Math.floor(val) - 1) : Math.floor(val);
-
-        if (target < $('#status_charging_current').prop("min"))
-            return;
-
-        if (status_plus_minus_timeout != null) {
-            window.clearTimeout(status_plus_minus_timeout);
-            status_plus_minus_timeout = null;
-        }
-
-        util.setNumericInput("status_charging_current", target, 3);
-
-        status_plus_minus_timeout = window.setTimeout(() => {
-            set_charging_current(target * 1000);
-        }, 2000);
-    });
-
-    $('#status_charging_current_plus').on("click", () => {
-        let val = parseFloat(input.val().toString());
-        let target = Math.floor(val) + 1;
-
-        if (target > $('#status_charging_current').prop("max"))
-            return;
-
-        if (status_plus_minus_timeout != null) {
-            window.clearTimeout(status_plus_minus_timeout);
-            status_plus_minus_timeout = null;
-        }
-
-        util.setNumericInput("status_charging_current", target, 3);
-
-        status_plus_minus_timeout = window.setTimeout(() => {
-            set_charging_current(target * 1000);
-        }, 2000);
-    });
-
-    $('#status_charging_current').on("input", () => {
-        status_charging_current_dirty = true;
-
-        let val = parseFloat(input.val().toString());
-        let target = val;
-
-        if (target > parseInt($('#status_charging_current').prop("max"))) {
-            return;
-        }
-
-        if (target < parseInt($('#status_charging_current').prop("min"))) {
-            return;
-        }
-
-        if (status_plus_minus_timeout != null) {
-            window.clearTimeout(status_plus_minus_timeout);
-            status_plus_minus_timeout = null;
-        }
-
-        status_plus_minus_timeout = window.setTimeout(() => {
-            // Use round here instead of float, as non-representable floats * 1000 create
-            // confusing behaviour otherwise.
-            // For example 8.123 (represented as 8.1229999...3 * 1000 is 8122.999...3, with floor results in 8122 instead of 8123.
-            // This is only a problem here, as all other occurences only work on non-fractional numbers.
-            set_charging_current(Math.round(target * 1000));
-        }, 2000);
-    });
 }
 
 export function add_event_listeners(source: API.APIEventTarget) {
-    source.addEventListener('evse/state', update_evse_state);
-    source.addEventListener('evse/auto_start_charging', update_evse_auto_start_charging);
-    source.addEventListener("evse/slots", update_evse_slots);
-    source.addEventListener("evse/state", update_evse_status_start_charging_button);
-    source.addEventListener("evse/slots", update_evse_status_start_charging_button);
 
 }
 
 export function update_sidebar_state(module_init: any) {
     $('#sidebar-evse').prop('hidden', !module_init.evse_v2);
+    $('#sidebar-evse-settings').prop('hidden', !module_init.evse_v2);
     $('#status-evse').prop('hidden', !module_init.evse_v2);
 }

@@ -32,17 +32,9 @@
 
 #include <memory>
 
-#define USERNAME_LENGTH 32
-#define DISPLAY_NAME_LENGTH 32
-#define USERNAME_ENTRY_LENGTH (USERNAME_LENGTH + DISPLAY_NAME_LENGTH)
-#define MAX_PASSIVE_USERS 256
 #define USERNAME_FILE "/users/all_usernames"
 
-#if MODULE_ESP32_ETHERNET_BRICK_AVAILABLE()
-#define MAX_ACTIVE_USERS 16
-#else
-#define MAX_ACTIVE_USERS 10
-#endif
+#define MAX_ACTIVE_USERS 17
 
 // We have to do access the evse/evse_v2 configs manually
 // because a lot of the code runs in setup(), i.e. before APIs
@@ -359,11 +351,40 @@ void Users::setup()
     if (user_config.get("next_user_id")->asUint() == 0)
         search_next_free_user();
 
+    Config* user_slot = get_user_slot();
     bool charge_start_tracked = charge_tracker.currentlyCharging();
-    bool charging = get_charger_state() == 2 || get_charger_state() == 3;
+    bool charging = get_charger_state() == 2 || get_charger_state() == 3
+                    || (user_slot->get("active")->asBool() && user_slot->get("max_current")->asUint() == 32000);
+
 
     if (charge_start_tracked && !charging) {
-        this->stop_charging(0, true);
+        float override_value = get_energy();
+
+        // This can be 0 if the EVSE 2.0 already reports the meter as available,
+        // but has not read any value from it.
+        if (std::isnan(override_value) || override_value == 0.0f)
+        {
+            auto start = millis();
+#if MODULE_EVSE_AVAILABLE() && MODULE_MODBUS_METER_AVAILABLE()
+            while(!deadline_elapsed(start + 10000) && meter.values.get("energy_abs")->asFloat() == 0)
+            {
+                modbus_meter.checkRS485State();
+                modbus_meter.loop();
+                delay(50);
+            }
+            override_value = meter.values.get("energy_abs")->asFloat();
+#elif MODULE_EVSE_V2_AVAILABLE()
+            while(!deadline_elapsed(start + 10000) && evse_v2.evse_energy_meter_values.get("energy_abs")->asFloat() == 0)
+            {
+                evse_v2.update_all_data();
+                delay(250);
+            }
+            override_value = evse_v2.evse_energy_meter_values.get("energy_abs")->asFloat();
+#endif
+        }
+
+        // ChargeTracker::endCharge replaces 0 with NAN.
+        this->stop_charging(0, true, override_value);
     }
 
     if (charging) {
@@ -385,8 +406,9 @@ void Users::setup()
             this->start_charging(0, 32000, CHARGE_TRACKER_AUTH_TYPE_NONE, Config::ConfVariant{});
     }
 
-    task_scheduler.scheduleWithFixedDelay([this](){
-        static uint8_t last_charger_state = get_charger_state();
+    auto outer_charger_state = get_charger_state();
+    task_scheduler.scheduleWithFixedDelay([this, outer_charger_state](){
+        static uint8_t last_charger_state = outer_charger_state;
 
         uint8_t charger_state = get_charger_state();
         if (charger_state == last_charger_state)
@@ -478,10 +500,55 @@ void Users::search_next_free_user() {
     user_config.get("next_user_id")->updateUint(user_id);
 }
 
+int Users::get_display_name(uint8_t user_id, char *ret_buf)
+{
+    for (auto &cfg : user_config.get("users")) {
+        if (cfg.get("id")->asUint() == user_id) {
+            String s = cfg.get("display_name")->asString();
+            strncpy(ret_buf, s.c_str(), 32);
+            return min(s.length(), 32u);
+        }
+    }
+    File f = LittleFS.open(USERNAME_FILE, "r");
+    f.seek(user_id * USERNAME_ENTRY_LENGTH + USERNAME_LENGTH, SeekMode::SeekSet);
+    f.read((uint8_t *) ret_buf, DISPLAY_NAME_LENGTH);
+    return strnlen(ret_buf, 32);
+}
+
+static void check_waiting_for_start(Config *ignored) {
+    (void) ignored;
+
+    static Config *iec_state = (Config *) api.getState("evse/state", false)->get("iec61851_state");
+    static Config *user_slot_current = (Config *) api.getState("evse/slots", false)->get(CHARGING_SLOT_USER)->get("max_current");
+
+    if (iec_state == nullptr || user_slot_current == nullptr)
+        return;
+
+    bool waiting_for_start = (iec_state->asUint() == 1)
+                          && (user_slot_current->asUint() == 0);
+
+    if (waiting_for_start)
+        evse_led.set_module(EvseLed::Blink::Nag, 2000);
+}
+
 void Users::register_urls()
 {
     // No users (except anonymous) configured: Make sure the EVSE's user slot is disabled.
-    if (user_config.get("users")->count() <= 1) {
+    bool user_slot = false;
+
+#if MODULE_EVSE_AVAILABLE()
+
+    if (api.hasFeature("evse"))
+        user_slot = evse.evse_slots.get(CHARGING_SLOT_USER)->get("active")->asBool();
+
+#elif MODULE_EVSE_V2_AVAILABLE()
+
+    if (api.hasFeature("evse"))
+        user_slot = evse_v2.evse_slots.get(CHARGING_SLOT_USER)->get("active")->asBool();
+
+#endif
+
+    if (user_config.get("users")->count() <= 1 && user_slot) {
         logger.printfln("User slot enabled, but no users configured. Disabling user slot.");
         api.callCommand("evse/user_enabled_update", Config::ConfUpdateObject{{
             {"enabled", false}
@@ -684,6 +751,7 @@ void Users::register_urls()
         user_config.get("users")->remove(idx);
         API::writeConfig("users/config", &user_config);
 
+#if MODULE_NFC_AVAILABLE()
         Config *tags = (Config *)nfc.config.get("authorized_tags");
 
         for(int i = 0; i < tags->count(); ++i) {
@@ -691,6 +759,7 @@ void Users::register_urls()
                 tags->get(i)->get("user_id")->updateUint(0);
         }
         API::writeConfig("nfc/config", &nfc.config);
+#endif
 
         if (!charge_tracker.is_user_tracked(remove.get("id")->asUint()))
         {
@@ -718,7 +787,7 @@ void Users::register_urls()
     server.on("/users/all_usernames", HTTP_GET, [this](WebServerRequest request) {
         //std::lock_guard<std::mutex> lock{records_mutex};
         size_t len = MAX_PASSIVE_USERS * USERNAME_ENTRY_LENGTH;
-        auto buf = std::unique_ptr<char[]>(new char[len]);
+        auto buf = heap_alloc_array<char>(len);
         if (buf == nullptr) {
             return request.send(507);
         }
@@ -729,37 +798,9 @@ void Users::register_urls()
         return request.send(200, "application/octet-stream", buf.get(), read);
     });
 
-    task_scheduler.scheduleWithFixedDelay([this]() {
-            static Config *evse_state = api.getState("evse/state", false);
-            static Config *evse_slots = api.getState("evse/slots", false);
-
-            if (evse_state == nullptr || evse_slots == nullptr)
-                return;
-
-            bool waiting_for_start = (evse_state->get("iec61851_state")->asUint() == 1)
-                                && (evse_slots->get(CHARGING_SLOT_USER)->get("active")->asBool())
-                                && (evse_slots->get(CHARGING_SLOT_USER)->get("max_current")->asUint() == 0);
-
-            if (blink_state != -1) {
-                set_led(blink_state);
-                blink_state = -1;
-            } else
-                set_led(waiting_for_start ? IND_NAG : -1);
-    }, 10, 10);
-}
-
-int16_t Users::get_blink_state()
-{
-    return blink_state;
-}
-
-void Users::set_blink_state(int16_t state)
-{
-    blink_state = state;
-}
-
-void Users::loop()
-{
+#if MODULE_EVSE_LED_AVAILABLE()
+    task_scheduler.scheduleWithFixedDelay([](){check_waiting_for_start(nullptr);}, 1000, 1000);
+#endif
 }
 
 uint8_t Users::next_user_id()
@@ -857,15 +898,15 @@ bool Users::start_charging(uint8_t user_id, uint16_t current_limit, uint8_t auth
     float meter_start = get_energy();
     uint32_t timestamp = timestamp_minutes();
 
+    if (!charge_tracker.startCharge(timestamp, meter_start, user_id, evse_uptime, auth_type, auth_info))
+        return false;
     write_user_slot_info(user_id, evse_uptime, timestamp, meter_start);
-    charge_tracker.startCharge(timestamp, meter_start, user_id, evse_uptime, auth_type, auth_info);
-
     set_user_current(current_limit);
 
     return true;
 }
 
-bool Users::stop_charging(uint8_t user_id, bool force)
+bool Users::stop_charging(uint8_t user_id, bool force, float meter_abs)
 {
     if (charge_tracker.currentlyCharging()) {
         UserSlotInfo info;
@@ -889,48 +930,14 @@ bool Users::stop_charging(uint8_t user_id, bool force)
             charge_duration = now_seconds - start_seconds;
         }
 
-        charge_tracker.endCharge(charge_duration, get_energy());
+        if (meter_abs)
+            charge_tracker.endCharge(charge_duration, meter_abs);
+        else
+            charge_tracker.endCharge(charge_duration, get_energy());
     }
 
     zero_user_slot_info();
     set_user_current(0);
 
     return true;
-}
-
-void set_led(int16_t mode)
-{
-    static int16_t last_mode = -1;
-    static uint32_t last_set = 0;
-
-    if (last_mode == mode && !deadline_elapsed(last_set + 2500))
-        return;
-
-    // sorted by priority
-    switch (mode) {
-        case IND_ACK:
-            break;
-        case IND_NACK:
-            if (last_mode == IND_ACK && !deadline_elapsed(last_set + 2340))
-                return;
-            break;
-        case IND_NAG:
-        case -1:
-            if ((last_mode == IND_ACK && !deadline_elapsed(last_set + 2340))
-                || (last_mode == IND_NACK && !deadline_elapsed(last_set + 3536)))
-                return;
-            break;
-        default:
-            break;
-    }
-
-#if MODULE_EVSE_AVAILABLE()
-    evse.set_indicator_led(mode, mode != IND_NACK ? 2620 : 3930, nullptr);
-#endif
-#if MODULE_EVSE_V2_AVAILABLE()
-    evse_v2.set_indicator_led(mode, mode != IND_NACK ? 2620 : 3930, nullptr);
-#endif
-
-    last_mode = mode;
-    last_set = millis();
 }

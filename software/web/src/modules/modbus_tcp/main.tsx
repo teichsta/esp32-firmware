@@ -39,10 +39,10 @@ interface config {
     evse_enable: boolean
 }
 
-const input_count = 21;
-const holding_count = 5 + input_count;
-const discrete_count = 11 + holding_count;
-
+const input_count = 23;
+const holding_count = 7 + input_count;
+const discrete_count = 12 + holding_count;
+const coil_count = 2 + discrete_count;
 
 export class ModbusTCP extends ConfigComponent<'modbus_tcp/config', {}, config> {
     constructor() {
@@ -50,7 +50,7 @@ export class ModbusTCP extends ConfigComponent<'modbus_tcp/config', {}, config> 
                 __("modbus_tcp.script.save_failed"),
                 __("modbus_tcp.script.reboot_content_changed"));
 
-                util.eventTarget.addEventListener('evse/slots', () => {
+                util.addApiEventListener('evse/slots', () => {
                     this.setState({evse_enable: API.get('evse/slots')[EVSE_SLOT_MODBUS_TCP].active});
                 });
 
@@ -86,7 +86,7 @@ export class ModbusTCP extends ConfigComponent<'modbus_tcp/config', {}, config> 
     }
 
     render(props: {}, state: ModbusTCPConfig & config) {
-        if (!state)
+        if (!util.render_allowed())
             return (<></>);
 
         let docu = <CollapsedSection label={__("modbus_tcp.content.table_docu")} collapseClasses="row">
@@ -130,12 +130,24 @@ export class ModbusTCP extends ConfigComponent<'modbus_tcp/config', {}, config> 
                         <th colSpan={5}>{__("modbus_tcp.docu.discrete_input")}</th>
                     </tr>
                 </thead>
+                <tbody>
                     {util.range(holding_count, discrete_count).map(i => this.trow(translate_unchecked(`modbus_tcp.docu.register${i}`),
                                                                                     translate_unchecked(`modbus_tcp.docu.name${i}`),
                                                                                     translate_unchecked(`modbus_tcp.docu.type${i}`),
                                                                                     translate_unchecked(`modbus_tcp.docu.feat${i}`),
                                                                                     translate_unchecked(`modbus_tcp.docu.expl${i}`)))}
+                </tbody>
+                <thead>
+                    <tr>
+                        <th colSpan={5}>{__("modbus_tcp.docu.coil")}</th>
+                    </tr>
+                </thead>
                 <tbody>
+                    {util.range(discrete_count, coil_count).map(i => this.trow(translate_unchecked(`modbus_tcp.docu.register${i}`),
+                                                                                    translate_unchecked(`modbus_tcp.docu.name${i}`),
+                                                                                    translate_unchecked(`modbus_tcp.docu.type${i}`),
+                                                                                    translate_unchecked(`modbus_tcp.docu.feat${i}`),
+                                                                                    translate_unchecked(`modbus_tcp.docu.expl${i}`)))}
                 </tbody>
             </table>
             </div>
@@ -144,7 +156,7 @@ export class ModbusTCP extends ConfigComponent<'modbus_tcp/config', {}, config> 
         return (
             <>
                 <ConfigForm id="modbus_tcp_config_form" title={__("modbus_tcp.content.modbus_tcp")} isModified={this.isModified()} onSave={() => this.save()} onReset={this.reset} onDirtyChange={(d) => this.ignore_updates = d}>
-                <FormRow label={__("modbus_tcp.content.enable")}>
+                    <FormRow label={__("modbus_tcp.content.enable")}>
                         <InputSelect items={[
                             ["0", __("modbus_tcp.content.disabled")],
                             ["1", __("modbus_tcp.content.read_only")],
@@ -153,13 +165,13 @@ export class ModbusTCP extends ConfigComponent<'modbus_tcp/config', {}, config> 
                         value={this.state.enable && this.state.evse_enable ? "2" : this.state.enable ? "1" : "0"}
                         onValue={(v) => {
                             this.setState({enable: Number(v) != 0, evse_enable: v == "2"});
-                        }}></InputSelect>
+                        }}/>
                     </FormRow>
                     <FormRow label={__("modbus_tcp.content.port")} label_muted={__("modbus_tcp.content.port_muted")}>
                         <InputNumber value={state.port}
                                 onValue={this.set("port")}
                                 min={1}
-                                max={65536}/>
+                                max={65535}/>
                     </FormRow>
                     <FormRow label={__("modbus_tcp.content.table")}>
                         <InputSelect items={[
@@ -170,7 +182,7 @@ export class ModbusTCP extends ConfigComponent<'modbus_tcp/config', {}, config> 
                         value={this.state.table}
                         onValue={(v) => {
                             this.setState({table: Number(v)});
-                        }}></InputSelect>
+                        }}/>
                     </FormRow>
                 </ConfigForm>
                 {

@@ -20,12 +20,14 @@
         },
         "input_password": {
             "to_be_cleared": "Will be cleared on save.",
-            "unchanged": "unchanged"
+            "unchanged": "Unchanged",
+            "required": "Required",
+            "not_set": "Unset"
         },
         "ip_configuration": {
             "ip_configuration": "IP configuration",
-            "dhcp": "automatic (DHCP)",
-            "static": "static",
+            "dhcp": "Automatic (DHCP)",
+            "static": "Static",
 
             "static_ip": "IP address",
             "subnet": "Subnet mask",
@@ -39,7 +41,12 @@
             "dns_invalid": "The DNS server IP must have four groups between 0 and 255 separated with a dot. For example 10.0.0.1, or be empty.",
             "dns2_invalid": "The alternative DNS server IP must have four groups between 0 and 255 separated with a dot. For example 10.0.0.1, or be empty.",
             "gateway_out_of_subnet": "Gateway address not in the configured subnet",
-            "subnet_captures_localhost": "Specified IP address and subnet mask not allowed: Would capture localhost (127.0.0.1)."
+            "subnet_captures_prefix": "Specified IP address and subnet mask not allowed: Would capture ",
+            "subnet_captures_suffix": ".",
+            "wifi_ap": "the WiFi access point",
+            "wifi_sta": "the WiFi connection",
+            "ethernet": "the Ethernet connection",
+            "wireguard": "the WireGuard connection"
         },
         "collapsed_section": {
             "show": "Show",
@@ -52,7 +59,8 @@
             "max_only_suffix": " characters allowed",
             "min_max_prefix": "At least ",
             "min_max_infix": " but at most ",
-            "min_max_suffix": " characters allowed"
+            "min_max_suffix": " characters allowed",
+            "required": "Field must not be empty"
         },
         "input_file": {
             "uploading": "uploading..."
@@ -64,7 +72,7 @@
         "event_connection_lost_title": null,
         "event_connection_lost": "Connection will be reestablished...",
         "to_be_cleared": "Will be cleared on save.",
-        "unchanged": "unchanged",
+        "unchanged": "Unchanged",
 
         "upload_abort": "Upload aborted",
         "upload_error": "Upload error",

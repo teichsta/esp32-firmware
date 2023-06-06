@@ -33,15 +33,10 @@ def main():
         fatal_error("Usage: {} firmware_type".format(sys.argv[0]))
 
     firmware_type = sys.argv[1]
-    if firmware_type not in ["esp32_ethernet", "warp2"]:
+    if firmware_type not in ["esp32_ethernet", "warp2", "energy_manager"]:
         fatal_error("Unknown firmware type {}".format(firmware_type))
 
     result = {"start": now()}
-
-    check_label_printer()
-
-    with open('printer_host_bag.txt', 'r') as f:
-        printer_host_bag = f.read().strip()
 
     print("Checking ESP state")
     mac_address = check_if_esp_is_sane_and_get_mac()
@@ -56,7 +51,12 @@ def main():
 
     result["uid"] = uid
 
-    ssid = ("warp2-" if firmware_type == "warp2" else "esp32-") + uid
+    if firmware_type == 'warp2':
+        ssid = "warp2-" + uid
+    elif firmware_type == 'energy_manager':
+        ssid = "wem-" + uid
+    else:
+        ssid = "esp32-" + uid
 
     run(["systemctl", "restart", "NetworkManager.service"])
     run(["iw", "reg", "set", "DE"])
@@ -69,7 +69,6 @@ def main():
     with wifi(ssid, passphrase):
         req = urllib.request.Request("http://10.0.0.1/ethernet/config_update",
                                      data=json.dumps({"enable_ethernet":True,
-                                                      "hostname":ssid,
                                                       "ip": "192.168.123.123",
                                                       "gateway":"0.0.0.0",
                                                       "subnet":"255.255.0.0",
@@ -98,7 +97,6 @@ def main():
         start = time.time()
         req = urllib.request.Request("http://192.168.123.123/ethernet/config_update",
                                  data=json.dumps({"enable_ethernet":True,
-                                                  "hostname":ssid,
                                                   "ip":"0.0.0.0",
                                                   "gateway":"0.0.0.0",
                                                   "subnet":"0.0.0.0",
@@ -127,7 +125,7 @@ def main():
     except Exception as e:
         fatal_error("Failed to read firmware version!")
 
-    if firmware_type == "warp2":
+    if firmware_type in ("warp2", "energy_manager"):
         try:
             with urllib.request.urlopen("http://192.168.123.123/hidden_proxy/enable", timeout=10) as f:
                 f.read()
@@ -141,7 +139,7 @@ def main():
     result["ethernet_test_successful"] = True
     print("Connected. Testing bricklet ports")
 
-    test_bricklet_ports(ipcon, ESP_ETHERNET_DEVICE_ID, firmware_type == "warp2")
+    test_bricklet_ports(ipcon, ESP_ETHERNET_DEVICE_ID, firmware_type in ("warp2", "energy_manager"))
     result["bricklet_port_test_successful"] = True
 
     led0 = input("Does the status LED blink blue? [y/n]")
@@ -169,10 +167,10 @@ def main():
 
     label_success = "n"
     while label_success != "y":
-        run(["python3", "print-esp32-label.py", ssid, passphrase, "-p", get_printer_host_pcba(), "-c", "3" if firmware_type == "warp2" else "1"])
+        run(["python3", "print-esp32-label.py", ssid, passphrase, "-c", "3" if firmware_type in ("warp2", "energy_manager") else "1"])
         label_prompt = "Stick one label on the ESP, put ESP{} in the ESD bag. Press n to retry printing the label{}. [y/n]".format(
-                " and the other two labels" if firmware_type == "warp2" else "",
-                "s" if firmware_type == "warp2" else "")
+                " and the other two labels" if firmware_type in ("warp2", "energy_manager") else "",
+                "s" if firmware_type in ("warp2", "energy_manager") else "")
 
         label_success = input(label_prompt)
         while label_success not in ("y", "n"):
@@ -181,7 +179,7 @@ def main():
     if firmware_type == "esp32_ethernet":
         bag_label_success = "n"
         while bag_label_success != "y":
-            run(["python3", "../../flash-test/label/print-label.py", '-p', printer_host_bag, "-c", "1", "ESP32 Ethernet Brick", str(ESP_ETHERNET_DEVICE_ID), datetime.datetime.now().strftime('%Y-%m-%d'), uid, fw_version])
+            run(["python3", "../../flash-test/label/print-label.py", "-c", "1", "ESP32 Ethernet Brick", str(ESP_ETHERNET_DEVICE_ID), datetime.datetime.now().strftime('%Y-%m-%d'), uid, fw_version])
             bag_label_prompt = "Stick bag label on bag. Press n to retry printing the label. [y/n]"
 
             bag_label_success = input(bag_label_prompt)

@@ -21,6 +21,7 @@
 
 #include "bindings/bricklet_nfc.h"
 
+#include "build.h"
 #include "config.h"
 #include "device_module.h"
 #include "nfc_bricklet_firmware_bin.embedded.h"
@@ -38,14 +39,21 @@ class NFC : public DeviceModule<TF_NFC,
                                 tf_nfc_create,
                                 tf_nfc_get_bootloader_mode,
                                 tf_nfc_reset,
-                                tf_nfc_destroy>
+                                tf_nfc_destroy,
+#ifdef BUILD_NAME_WARP2
+                                true
+#else
+                                false
+#endif
+
+                                >
 {
 public:
     NFC() : DeviceModule("nfc", "NFC", "NFC", std::bind(&NFC::setup_nfc, this)) {}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void loop();
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
+    void loop() override;
 
     struct tag_info_t {
         uint32_t last_seen;

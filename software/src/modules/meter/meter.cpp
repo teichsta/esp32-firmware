@@ -25,6 +25,7 @@
 #include "task_scheduler.h"
 #include "modules.h"
 
+
 void Meter::pre_setup()
 {
     state = Config::Object({
@@ -33,9 +34,9 @@ void Meter::pre_setup()
     });
 
     values = Config::Object({
-        {"power", Config::Float(0.0)},
-        {"energy_rel", Config::Float(0.0)},
-        {"energy_abs", Config::Float(0.0)},
+        {"power", Config::Float(NAN)},
+        {"energy_rel", Config::Float(NAN)},
+        {"energy_abs", Config::Float(NAN)},
     });
 
     phases = Config::Object({
@@ -48,7 +49,7 @@ void Meter::pre_setup()
     });
 
     all_values = Config::Array({},
-        new Config{Config::Float(0)},
+        new Config{Config::Float(NAN)},
         0, METER_ALL_VALUES_COUNT, Config::type_id<Config::ConfFloat>());
 
     last_reset = Config::Object({
@@ -84,10 +85,26 @@ void Meter::updateMeterValues(float power, float energy_rel, float energy_abs)
 {
     if (!meter_setup_done)
         return;
+    bool changed = false;
+    float old_value;
 
-    values.get("power")->updateFloat(power);
-    values.get("energy_rel")->updateFloat(energy_rel);
-    values.get("energy_abs")->updateFloat(energy_abs);
+    if (!isnan(power)) {
+        old_value = values.get("power")->asFloat();
+        changed |= values.get("power")->updateFloat(power) && !isnan(old_value);
+    }
+
+    if (!isnan(energy_rel)) {
+        old_value = values.get("energy_rel")->asFloat();
+        changed |= values.get("energy_rel")->updateFloat(energy_rel) && !isnan(old_value);
+    }
+
+    if (!isnan(energy_abs)) {
+        old_value = values.get("energy_abs")->asFloat();
+        changed |= values.get("energy_abs")->updateFloat(energy_abs) && !isnan(old_value);
+    }
+
+    if (changed)
+        last_value_change = now_us();
 
     power_hist.add_sample(power);
 }
@@ -117,8 +134,18 @@ void Meter::updateMeterAllValues(float values[METER_ALL_VALUES_COUNT])
     if (!meter_setup_done)
         return;
 
+    bool changed = false;
+
     for (int i = 0; i < METER_ALL_VALUES_COUNT; ++i)
-        all_values.get(i)->updateFloat(values[i]);
+        if (!isnan(values[i])) {
+            auto wrap = all_values.get(i);
+            auto old_value = wrap->asFloat();
+            changed |= wrap->updateFloat(values[i]) && !isnan(old_value);
+        }
+
+    if (changed) {
+        last_value_change = now_us();
+    }
 }
 
 void Meter::registerResetCallback(std::function<void(void)> cb)
@@ -132,12 +159,16 @@ void Meter::setupMeter(uint8_t meter_type)
         return;
 
     api.addFeature("meter");
-    if (meter_type == 2 || meter_type == 3) {
-        api.addFeature("meter_phases");
-        api.addFeature("meter_all_values");
+    switch(meter_type) {
+        case METER_TYPE_SDM630:
+        case METER_TYPE_SDM72DMV2:
+        case METER_TYPE_SDM630MCTV2:
+            api.addFeature("meter_phases");
+            /* FALLTHROUGH*/
+        case METER_TYPE_SDM72CTM:
+            api.addFeature("meter_all_values");
+            break;
     }
-
-    power_hist.setup();
 
     for (int i = all_values.count(); i < METER_ALL_VALUES_COUNT; ++i) {
         all_values.add();
@@ -150,6 +181,7 @@ void Meter::setup()
 {
     initialized = true;
     api.restorePersistentConfig("meter/last_reset", &last_reset);
+    power_hist.setup();
 }
 
 void Meter::register_urls()
@@ -161,7 +193,7 @@ void Meter::register_urls()
     api.addState("meter/last_reset", &last_reset, {}, 1000);
 
     api.addCommand("meter/reset", Config::Null(), {}, [this](){
-        for (auto cb : this->reset_callbacks)
+        for (auto &cb : this->reset_callbacks)
             cb();
 
         struct timeval tv_now;
@@ -175,8 +207,4 @@ void Meter::register_urls()
     }, true);
 
     power_hist.register_urls("meter/");
-}
-
-void Meter::loop()
-{
 }

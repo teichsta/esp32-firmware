@@ -1,5 +1,5 @@
 /* esp32-firmware
- * Copyright (C) 2022 Frederic Henrichs <frederic@tinkerforge.com>
+ * Copyright (C) 2023 Frederic Henrichs <frederic@tinkerforge.com>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -19,39 +19,43 @@
 
 #pragma once
 
-#include "device_module.h"
 #include "config.h"
-#include "bindings/bricklet_real_time_clock_v2.h"
-#include "real_time_clock_v2_bricklet_firmware_bin.embedded.h"
 
+#include "module.h"
 
-class Rtc : public DeviceModule<TF_RealTimeClockV2,
-                            real_time_clock_v2_bricklet_firmware_bin_data,
-                            real_time_clock_v2_bricklet_firmware_bin_length,
-                            tf_real_time_clock_v2_create,
-                            tf_real_time_clock_v2_get_bootloader_mode,
-                            tf_real_time_clock_v2_reset,
-                            tf_real_time_clock_v2_destroy>
+class IRtcBackend
 {
-    private:
+public:
+    IRtcBackend() {}
+    virtual ~IRtcBackend() {}
 
+    virtual void set_time(const timeval &time) = 0;
+    virtual void set_time(const tm &time) = 0;
+    virtual struct timeval get_time() = 0;
+    virtual bool update_system_time() = 0;
+    virtual void reset() = 0;
+};
 
-    public:
+class Rtc final : public IModule
+{
+private:
+    ConfigRoot time;
+    ConfigRoot time_update;
+    ConfigRoot rtc_config;
 
-        bool initialized = false;
+    IRtcBackend *backend = NULL;
 
-        Rtc(): DeviceModule("rtc", "Real Time Clock 2.0", "Real Time Clock 2.0", std::bind(&Rtc::setup_rtc, this)) {};
-        void pre_setup();
-        void setup();
-        void loop();
-        void register_urls();
+public:
+    Rtc() {}
 
-        void setup_rtc();
-        void set_time(timeval time);
-        void update_system_time();
-        struct timeval get_time();
+    void pre_setup() override;
+    void setup() override;
 
-        ConfigRoot time;
-        ConfigRoot time_update;
-        ConfigRoot config;
+    void register_backend(IRtcBackend *_backend);
+
+    void reset();
+
+    void set_time(const timeval &_time);
+    timeval get_time();
+    bool update_system_time();
 };

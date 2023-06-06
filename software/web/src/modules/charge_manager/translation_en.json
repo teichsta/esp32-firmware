@@ -6,9 +6,7 @@
             "manager": "Activated",
             "error": "Error",
             "managed_boxes": "Managed chargers",
-            "available_current": "Available current",
-            "available_current_minimum": "0 A",
-            "available_current_maximum": "..."
+            "available_current": "Available current"
         },
         "navbar": {
             "charge_manager": null
@@ -24,11 +22,19 @@
             "verbose_desc": "Creates log entries whenever current is redistributed",
             "default_available_current": "Default available current",
             "default_available_current_muted": "will be used after charge manager reboot",
-            "default_available_current_invalid": "The default available current can at most be as much as the maximum available current!",
-            "maximum_available_current": "Maximum available current",
-            "maximum_available_current_muted": "available current can only be set to at most this value using the API and web interface",
-            "minimum_current": "Minimal charge current",
-            "minimum_current_muted": "must be available to start a charge",
+            "default_available_current_invalid": "The default available current can at most be the maximum total current.",
+            "maximum_available_current": "Maximum total current",
+            "maximum_available_current_muted": "Maximum allowed current of all chargers in total. This is usually the rated current of the common supply line.",
+            "minimum_current_auto": "Automatic minimum current",
+            "minimum_current_auto_desc": "Automatically set minimum charge current based on selected vehicle model",
+            "minimum_current_vehicle_type": "Vehicle model",
+            "minimum_current_vehicle_type_other": "Default",
+            "minimum_current_vehicle_type_zoe": "Renault ZOE R135, ZOE R110 or Twingo Z.E.",
+
+            "minimum_current": "Minimum three-phase charge current",
+            "minimum_current_muted": "lowest charge current supported by your vehicle when charging in three-phase mode",
+            "minimum_current_1p": "Minimum single-phase charge current",
+            "minimum_current_1p_muted": "lowest charge current supported by your vehicle when charging in single-phase mode",
 
             "configuration_mode": "Expert settings",
             "configuration_mode_muted": "",
@@ -40,6 +46,12 @@
             "add_charger_modal_save": "Save",
             "add_charger_modal_found": "Discovered chargers",
 
+            "multi_broadcast_modal_title": "Reserved, multi- or broadcast ip addresses found",
+            "multi_broadcast_modal_body": "These reserved, multi- or broadcast ip addresses were detected: ",
+            "multi_broadcast_modal_body_end": "Are you sure that you want to save the settings?",
+            "multi_broadcast_modal_save": "Yes",
+            "multi_broadcast_modal_cancel": "Cancel",
+
             "scan_error_1": "Firmware version incompatible",
             "scan_error_2": "Charge management disabled",
 
@@ -47,7 +59,9 @@
             "mode_manager": "Charge manager",
             "mode_managed": "Externally controlled",
 
-            "managed_boxes": "Managed chargers"
+            "managed_boxes": "Managed chargers",
+
+            "host_exists": "Host already exists"
         },
         "script": {
             "charge_state_0": "No vehicle connected",
@@ -70,10 +84,10 @@
             "charge_error_130": "Charge controller does not react",
 
             "charge_error_192": "OK",
-            "charge_error_193": "Switch error",
-            "charge_error_194": "DC fault protector error",
-            "charge_error_195": "Contactor error",
-            "charge_error_196": "Vehicle communication error",
+            "charge_error_194": "Switch error",
+            "charge_error_195": "DC fault protector error",
+            "charge_error_196": "Contactor error",
+            "charge_error_197": "Vehicle communication error",
 
             "charge_state_blocked_by_other_box": "Blocked",
             "charge_state_blocked_by_other_box_details": "Error with another charger",

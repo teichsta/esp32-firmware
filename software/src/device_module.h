@@ -24,7 +24,10 @@
 #include "bindings/base58.h"
 #include "bindings/hal_common.h"
 #include "bindings/errors.h"
+#include "bindings/bricklet_unknown.h"
+#include "tools.h"
 
+#include "module.h"
 #include "api.h"
 #include "event_log.h"
 #include "task_scheduler.h"
@@ -42,8 +45,9 @@ template <typename DeviceT,
           int (*init_function)(DeviceT *, const char *, TF_HAL *),
           int (*get_bootloader_mode_function)(DeviceT *, uint8_t *),
           int (*reset_function)(DeviceT *),
-          int (*destroy_function)(DeviceT *)>
-class DeviceModule
+          int (*destroy_function)(DeviceT *),
+          bool mandatory = true>
+class DeviceModule : public IModule
 {
 public:
     DeviceModule(const char *url_prefix,
@@ -71,8 +75,11 @@ public:
         TF_TFP *tfp = tf_hal_get_tfp(&hal, nullptr, nullptr, &device_id, false);
 
         if (tfp == nullptr) {
-            logger.printfln("No %s Bricklet found. Disabling %s support.", device_name, module_name);
+            if (mandatory)
+                logger.printfln("No %s Bricklet found. Disabling %s support.", device_name, module_name);
             return false;
+        } else if (!mandatory) {
+            logger.printfln("%s Bricklet found. Enabling %s support.", device_name, module_name);
         }
 
         device_found = true;
@@ -101,6 +108,16 @@ public:
             return false;
         }
 
+        identity = Config::Object({
+            {"uid", Config::Str("", 0, 8)},
+            {"connected_uid", Config::Str("", 0, 8)},
+            {"position", Config::Str("", 0, 1)},
+            {"hw_version", Config::Str("", 0, 12)},
+            {"fw_version", Config::Str("", 0, 12)},
+            {"device_identifier", Config::Uint16(123)}
+        });
+
+        update_identity(tfp);
         return true;
     }
 
@@ -120,6 +137,8 @@ public:
 
             initialized = false;
         }, true);
+
+        api.addState(url_prefix + "/identity", &identity, {}, 1000);
     }
 
     void loop()
@@ -133,7 +152,8 @@ public:
         }
     }
 
-    void reset() {
+    void reset()
+    {
         reset_function(&device);
     }
 
@@ -158,7 +178,6 @@ public:
     }
 
     bool device_found = false;
-    bool initialized = false;
 
     String url_prefix;
     const char *device_name;
@@ -175,4 +194,48 @@ public:
     // This simplifies reimplementing modules for other hardware.
 protected:
     DeviceT device;
+    ConfigRoot identity;
+
+private:
+    void update_identity(TF_TFP *tfp) {
+        char uid[8];
+        char connected_uid[8];
+        char position;
+        uint8_t hw_version[3];
+        uint8_t fw_version[3];
+        uint16_t device_identifier;
+
+        TFPSwap swap(tfp);
+        TF_Unknown unknown;
+
+        int rc = tf_unknown_create(&unknown, tfp);
+        defer {tf_unknown_destroy(&unknown);};
+
+        if (rc != TF_E_OK) {
+            logger.printfln("Creation of unknown device failed with rc %i", rc);
+            return;
+        }
+
+        rc = tf_unknown_get_identity(&unknown, uid, connected_uid, &position, hw_version, fw_version, &device_identifier);
+        if (rc != TF_E_OK) {
+            logger.printfln("Getting identity of unknown device failed with rc %i", rc);
+        }
+
+        String value(uid);
+        identity.get("uid")->updateString(value);
+
+        value = String(connected_uid);
+        identity.get("connected_uid")->updateString(value);
+
+        value = String(position);
+        identity.get("position")->updateString(value);
+
+        value = String(hw_version[0] + String(".") + hw_version[1] + "." + hw_version[2]);
+        identity.get("hw_version")->updateString(value);
+
+        value = String(fw_version[0] + String(".") + fw_version[1] + "." + fw_version[2]);
+        identity.get("fw_version")->updateString(value);
+
+        identity.get("device_identifier")->updateUint(device_identifier);
+    }
 };

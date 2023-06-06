@@ -21,24 +21,22 @@
 
 #include "config.h"
 
-class ChargeManager
+#include "module.h"
+
+class ChargeManager final : public IModule
 {
 public:
     ChargeManager(){}
-    void pre_setup();
-    void setup();
-    void register_urls();
-    void post_setup();
-    void loop();
-
-    bool initialized = false;
+    void pre_setup() override;
+    void setup() override;
+    void register_urls() override;
 
     void start_evse_state_update();
     void send_current();
     void distribute_current();
     void start_manager_task();
     void check_watchdog();
-    void set_available_current(uint32_t current);
+    bool have_chargers();
     bool seen_all_chargers();
     bool is_charging_stopped(uint32_t last_update_cutoff);
     void set_all_control_pilot_disconnect(bool disconnect);
@@ -52,11 +50,16 @@ public:
     ConfigRoot charge_manager_state;
 
     ConfigRoot charge_manager_available_current;
+    ConfigRoot charge_manager_available_current_update;
+    ConfigRoot charge_manager_available_phases;
+    ConfigRoot charge_manager_available_phases_update;
     ConfigRoot charge_manager_control_pilot_disconnect;
 
     uint32_t last_available_current_update = 0;
 
 private:
-    bool all_chargers_seen;
+    bool all_chargers_seen = false;
     std::function<void(uint32_t)> allocated_current_callback;
+
+    std::unique_ptr<char[]> distribution_log;
 };

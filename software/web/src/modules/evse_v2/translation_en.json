@@ -17,6 +17,13 @@
             "gpio_shutdown_on_open": "Shut down on open",
             "gpio_shutdown_on_close": "Shut down on close",
             "not_configured": "Not configured",
+            "active_low_blocked": "Blocks if closed",
+            "active_low_prefix": "Limits charge current to ",
+            "active_low_suffix": " if closed",
+            "active_high_blocked": "Blocks if open",
+            "active_high_prefix": "Limits charge current to ",
+            "active_high_suffix": "if open",
+
             "todo": "Have a feature request? Write an e-mail to info@tinkerforge.com",
             "gpio_in": "General purpose input",
             "gpio_in_muted": "readable on GPIO 16",
@@ -38,13 +45,6 @@
             "control_pilot_disconnect_desc_muted": "",
             "control_pilot_disconnect": "Control Pilot Disconnect",
 
-            "control_pilot_cfg": "Control Pilot configuration",
-            "control_pilot_cfg_muted": "Simulates unplugging and plugging the charging cable",
-            "control_pilot_disconnected": "Disconnected",
-            "control_pilot_connected": "Connected",
-            "control_pilot_automatic": "Automatic",
-            "control_pilot_state": "Control Pilot state",
-
             "dc_fault_current_state": "DC fault protector state",
             "dc_fault_current_state_desc": "",
             "dc_fault_current_ok": "OK",
@@ -57,7 +57,8 @@
             "reset_dc_fault_title": "Reset the DC fault protector",
             "reset_dc_fault_content": "Resetting the DC fault protector restores the ability to charge. <b>Ensure that the reason why the DC fault protector triggered is resolved!</b> <a href=\"{{{manual_url}}}\">See manual for details.</a> Really reset the DC fault protector?",
             "abort": "Abort",
-            "reset": "Reset"
+            "reset": "Reset",
+            "trigger_dc_fault_test": "Test DC fault protector"
         },
         "script": {
             "control_pilot_configuration_failed": "Updating the control pilot configuration failed",
@@ -68,6 +69,7 @@
             "meter_type_1": "SDM72",
             "meter_type_2": "SDM630",
             "meter_type_3": "SDM72V2",
+            "meter_type_254": "internal",
 
             "slot_4": "Auto-start or button"
         }

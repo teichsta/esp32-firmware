@@ -3,10 +3,10 @@
         "status": {
         },
         "navbar": {
-            "nfc": "NFC tags"
+            "nfc": "NFC Tags"
         },
         "content": {
-            "nfc": "NFC tags",
+            "nfc": "NFC Tags",
 
             "authorized_tags": "Authorized tags",
 
@@ -39,7 +39,7 @@
             "not_seen": "Not seen since the last reboot or 24 hours",
             "save_failed": "Failed to update the NFC configuration",
             "reboot_content_changed": "NFC configuration",
-            "not_assigned": "not assigned",
+            "not_assigned": "Not assigned",
             "not_assigned_desc": "This tag will not be able to start charges."
         }
     }

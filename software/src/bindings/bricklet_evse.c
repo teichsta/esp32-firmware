@@ -1,5 +1,5 @@
 /* ***********************************************************
- * This file was automatically generated on 2022-12-22.      *
+ * This file was automatically generated on 2023-01-25.      *
  *                                                           *
  * C/C++ for Microcontrollers Bindings Version 2.0.3         *
  *                                                           *
@@ -293,15 +293,12 @@ int tf_evse_get_state(TF_EVSE *evse, uint8_t *ret_iec61851_state, uint8_t *ret_c
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -317,6 +314,13 @@ int tf_evse_get_state(TF_EVSE *evse, uint8_t *ret_iec61851_state, uint8_t *ret_c
             if (ret_lock_state != NULL) { *ret_lock_state = tf_packet_buffer_read_uint8_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -354,15 +358,12 @@ int tf_evse_get_hardware_configuration(TF_EVSE *evse, uint8_t *ret_jumper_config
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -374,6 +375,13 @@ int tf_evse_get_hardware_configuration(TF_EVSE *evse, uint8_t *ret_jumper_config
             if (ret_evse_version != NULL) { *ret_evse_version = tf_packet_buffer_read_uint8_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -412,15 +420,12 @@ int tf_evse_get_low_level_state(TF_EVSE *evse, uint8_t *ret_led_state, uint16_t 
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -438,6 +443,13 @@ int tf_evse_get_low_level_state(TF_EVSE *evse, uint8_t *ret_led_state, uint16_t 
             if (ret_uptime != NULL) { *ret_uptime = tf_packet_buffer_read_uint32_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 4); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -483,13 +495,21 @@ int tf_evse_set_charging_slot(TF_EVSE *evse, uint8_t slot, uint16_t max_current,
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -534,13 +554,21 @@ int tf_evse_set_charging_slot_max_current(TF_EVSE *evse, uint8_t slot, uint16_t 
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -585,13 +613,21 @@ int tf_evse_set_charging_slot_active(TF_EVSE *evse, uint8_t slot, bool active) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -636,13 +672,21 @@ int tf_evse_set_charging_slot_clear_on_disconnect(TF_EVSE *evse, uint8_t slot, b
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -685,15 +729,12 @@ int tf_evse_get_charging_slot(TF_EVSE *evse, uint8_t slot, uint16_t *ret_max_cur
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -705,6 +746,13 @@ int tf_evse_get_charging_slot(TF_EVSE *evse, uint8_t slot, uint16_t *ret_max_cur
             if (ret_clear_on_disconnect != NULL) { *ret_clear_on_disconnect = tf_packet_buffer_read_bool(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -743,15 +791,12 @@ int tf_evse_get_all_charging_slots(TF_EVSE *evse, uint16_t ret_max_current[20], 
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -762,6 +807,13 @@ int tf_evse_get_all_charging_slots(TF_EVSE *evse, uint16_t ret_max_current[20], 
             if (ret_active_and_clear_on_disconnect != NULL) { for (_i = 0; _i < 20; ++_i) ret_active_and_clear_on_disconnect[_i] = tf_packet_buffer_read_uint8_t(_recv_buf);} else { tf_packet_buffer_remove(_recv_buf, 20); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -807,13 +859,21 @@ int tf_evse_set_charging_slot_default(TF_EVSE *evse, uint8_t slot, uint16_t max_
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -856,15 +916,12 @@ int tf_evse_get_charging_slot_default(TF_EVSE *evse, uint8_t slot, uint16_t *ret
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -876,6 +933,13 @@ int tf_evse_get_charging_slot_default(TF_EVSE *evse, uint8_t slot, uint16_t *ret
             if (ret_clear_on_disconnect != NULL) { *ret_clear_on_disconnect = tf_packet_buffer_read_bool(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -919,15 +983,12 @@ int tf_evse_calibrate(TF_EVSE *evse, uint8_t state, uint32_t password, int32_t v
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -937,6 +998,13 @@ int tf_evse_calibrate(TF_EVSE *evse, uint8_t state, uint32_t password, int32_t v
             if (ret_success != NULL) { *ret_success = tf_packet_buffer_read_bool(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -975,15 +1043,12 @@ int tf_evse_get_user_calibration(TF_EVSE *evse, bool *ret_user_calibration_activ
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -998,6 +1063,13 @@ int tf_evse_get_user_calibration(TF_EVSE *evse, bool *ret_user_calibration_activ
             if (ret_resistance_880 != NULL) { for (_i = 0; _i < 14; ++_i) ret_resistance_880[_i] = tf_packet_buffer_read_int16_t(_recv_buf);} else { tf_packet_buffer_remove(_recv_buf, 28); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1047,13 +1119,21 @@ int tf_evse_set_user_calibration(TF_EVSE *evse, uint32_t password, bool user_cal
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -1097,15 +1177,12 @@ int tf_evse_get_data_storage(TF_EVSE *evse, uint8_t page, uint8_t ret_data[63]) 
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1115,6 +1192,13 @@ int tf_evse_get_data_storage(TF_EVSE *evse, uint8_t page, uint8_t ret_data[63]) 
             if (ret_data != NULL) { for (_i = 0; _i < 63; ++_i) ret_data[_i] = tf_packet_buffer_read_uint8_t(_recv_buf);} else { tf_packet_buffer_remove(_recv_buf, 63); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1158,13 +1242,21 @@ int tf_evse_set_data_storage(TF_EVSE *evse, uint8_t page, const uint8_t data[63]
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -1203,15 +1295,12 @@ int tf_evse_get_indicator_led(TF_EVSE *evse, int16_t *ret_indication, uint16_t *
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1222,6 +1311,13 @@ int tf_evse_get_indicator_led(TF_EVSE *evse, int16_t *ret_indication, uint16_t *
             if (ret_duration != NULL) { *ret_duration = tf_packet_buffer_read_uint16_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 2); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1264,15 +1360,12 @@ int tf_evse_set_indicator_led(TF_EVSE *evse, int16_t indication, uint16_t durati
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1282,6 +1375,13 @@ int tf_evse_set_indicator_led(TF_EVSE *evse, int16_t indication, uint16_t durati
             if (ret_status != NULL) { *ret_status = tf_packet_buffer_read_uint8_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1319,15 +1419,12 @@ int tf_evse_get_button_state(TF_EVSE *evse, uint32_t *ret_button_press_time, uin
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1339,6 +1436,13 @@ int tf_evse_get_button_state(TF_EVSE *evse, uint32_t *ret_button_press_time, uin
             if (ret_button_pressed != NULL) { *ret_button_pressed = tf_packet_buffer_read_bool(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1377,15 +1481,12 @@ int tf_evse_get_all_data_1(TF_EVSE *evse, uint8_t *ret_iec61851_state, uint8_t *
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1419,6 +1520,13 @@ int tf_evse_get_all_data_1(TF_EVSE *evse, uint8_t *ret_iec61851_state, uint8_t *
             if (ret_boost_mode_enabled != NULL) { *ret_boost_mode_enabled = tf_packet_buffer_read_bool(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1461,13 +1569,21 @@ int tf_evse_factory_reset(TF_EVSE *evse, uint32_t password) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -1511,13 +1627,21 @@ int tf_evse_set_boost_mode(TF_EVSE *evse, bool boost_mode_enabled) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -1556,15 +1680,12 @@ int tf_evse_get_boost_mode(TF_EVSE *evse, bool *ret_boost_mode_enabled) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1574,6 +1695,13 @@ int tf_evse_get_boost_mode(TF_EVSE *evse, bool *ret_boost_mode_enabled) {
             if (ret_boost_mode_enabled != NULL) { *ret_boost_mode_enabled = tf_packet_buffer_read_bool(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1611,15 +1739,12 @@ int tf_evse_get_spitfp_error_count(TF_EVSE *evse, uint32_t *ret_error_count_ack_
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1632,6 +1757,13 @@ int tf_evse_get_spitfp_error_count(TF_EVSE *evse, uint32_t *ret_error_count_ack_
             if (ret_error_count_overflow != NULL) { *ret_error_count_overflow = tf_packet_buffer_read_uint32_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 4); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1673,15 +1805,12 @@ int tf_evse_set_bootloader_mode(TF_EVSE *evse, uint8_t mode, uint8_t *ret_status
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1691,6 +1820,13 @@ int tf_evse_set_bootloader_mode(TF_EVSE *evse, uint8_t mode, uint8_t *ret_status
             if (ret_status != NULL) { *ret_status = tf_packet_buffer_read_uint8_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1728,15 +1864,12 @@ int tf_evse_get_bootloader_mode(TF_EVSE *evse, uint8_t *ret_mode) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1746,6 +1879,13 @@ int tf_evse_get_bootloader_mode(TF_EVSE *evse, uint8_t *ret_mode) {
             if (ret_mode != NULL) { *ret_mode = tf_packet_buffer_read_uint8_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1788,13 +1928,21 @@ int tf_evse_set_write_firmware_pointer(TF_EVSE *evse, uint32_t pointer) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -1837,15 +1985,12 @@ int tf_evse_write_firmware(TF_EVSE *evse, const uint8_t data[64], uint8_t *ret_s
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1855,6 +2000,13 @@ int tf_evse_write_firmware(TF_EVSE *evse, const uint8_t data[64], uint8_t *ret_s
             if (ret_status != NULL) { *ret_status = tf_packet_buffer_read_uint8_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1897,13 +2049,21 @@ int tf_evse_set_status_led_config(TF_EVSE *evse, uint8_t config) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -1942,15 +2102,12 @@ int tf_evse_get_status_led_config(TF_EVSE *evse, uint8_t *ret_config) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -1960,6 +2117,13 @@ int tf_evse_get_status_led_config(TF_EVSE *evse, uint8_t *ret_config) {
             if (ret_config != NULL) { *ret_config = tf_packet_buffer_read_uint8_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 1); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -1997,15 +2161,12 @@ int tf_evse_get_chip_temperature(TF_EVSE *evse, int16_t *ret_temperature) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -2015,6 +2176,13 @@ int tf_evse_get_chip_temperature(TF_EVSE *evse, int16_t *ret_temperature) {
             if (ret_temperature != NULL) { *ret_temperature = tf_packet_buffer_read_int16_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 2); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -2053,13 +2221,21 @@ int tf_evse_reset(TF_EVSE *evse) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -2103,13 +2279,21 @@ int tf_evse_write_uid(TF_EVSE *evse, uint32_t uid) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
+
+    if (_result & TF_TICK_PACKET_RECEIVED) {
+        tf_tfp_packet_processed(evse->tfp);
+    }
+
+
     if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
         return TF_E_TIMEOUT;
     }
 
@@ -2148,15 +2332,12 @@ int tf_evse_read_uid(TF_EVSE *evse, uint32_t *ret_uid) {
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -2166,6 +2347,13 @@ int tf_evse_read_uid(TF_EVSE *evse, uint32_t *ret_uid) {
             if (ret_uid != NULL) { *ret_uid = tf_packet_buffer_read_uint32_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 4); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
@@ -2204,15 +2392,12 @@ int tf_evse_get_identity(TF_EVSE *evse, char ret_uid[8], char ret_connected_uid[
 
     uint8_t _error_code = 0;
     uint8_t _length = 0;
-    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length);
+    int _result = tf_tfp_send_packet(evse->tfp, _response_expected, _deadline, &_error_code, &_length, TF_NEW_PACKET);
 
     if (_result < 0) {
         return _result;
     }
 
-    if (_result & TF_TICK_TIMEOUT) {
-        return TF_E_TIMEOUT;
-    }
 
     if (_result & TF_TICK_PACKET_RECEIVED) {
         TF_PacketBuffer *_recv_buf = tf_tfp_get_receive_buffer(evse->tfp);
@@ -2227,6 +2412,13 @@ int tf_evse_get_identity(TF_EVSE *evse, char ret_uid[8], char ret_connected_uid[
             if (ret_device_identifier != NULL) { *ret_device_identifier = tf_packet_buffer_read_uint16_t(_recv_buf); } else { tf_packet_buffer_remove(_recv_buf, 2); }
         }
         tf_tfp_packet_processed(evse->tfp);
+    }
+
+
+    if (_result & TF_TICK_TIMEOUT) {
+        _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);
+        (void) _result;
+        return TF_E_TIMEOUT;
     }
 
     _result = tf_tfp_finish_send(evse->tfp, _result, _deadline);

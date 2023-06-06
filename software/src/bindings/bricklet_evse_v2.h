@@ -1,5 +1,5 @@
 /* ***********************************************************
- * This file was automatically generated on 2022-12-16.      *
+ * This file was automatically generated on 2023-04-25.      *
  *                                                           *
  * C/C++ for Microcontrollers Bindings Version 2.0.3         *
  *                                                           *
@@ -218,6 +218,11 @@ typedef struct TF_EVSEV2 {
  * \ingroup TF_EVSEV2
  */
 #define TF_EVSE_V2_FUNCTION_GET_BOOST_MODE 35
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_FUNCTION_TRIGGER_DC_FAULT_TEST 36
 
 /**
  * \ingroup TF_EVSEV2
@@ -582,6 +587,91 @@ typedef struct TF_EVSEV2 {
  * \ingroup TF_EVSEV2
  */
 #define TF_EVSE_V2_ENERGY_METER_TYPE_SDM72V2 3
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_UNCONFIGURED 0
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_LOW_MAX_0A 1
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_LOW_MAX_6A 2
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_LOW_MAX_8A 3
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_LOW_MAX_10A 4
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_LOW_MAX_13A 5
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_LOW_MAX_16A 6
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_LOW_MAX_20A 7
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_LOW_MAX_25A 8
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_HIGH_MAX_0A 9
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_HIGH_MAX_6A 10
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_HIGH_MAX_8A 11
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_HIGH_MAX_10A 12
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_HIGH_MAX_13A 13
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_HIGH_MAX_16A 14
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_HIGH_MAX_20A 15
+
+/**
+ * \ingroup TF_EVSEV2
+ */
+#define TF_EVSE_V2_INPUT_ACTIVE_HIGH_MAX_25A 16
 
 /**
  * \ingroup TF_EVSEV2
@@ -973,7 +1063,7 @@ int tf_evse_v2_get_all_data_1(TF_EVSEV2 *evse_v2, uint8_t *ret_iec61851_state, u
  *
  * TODO
  */
-int tf_evse_v2_get_all_data_2(TF_EVSEV2 *evse_v2, uint8_t *ret_shutdown_input_configuration, uint8_t *ret_input_configuration, uint8_t *ret_output_configuration, int16_t *ret_indication, uint16_t *ret_duration, uint8_t *ret_button_configuration, uint32_t *ret_button_press_time, uint32_t *ret_button_release_time, bool *ret_button_pressed, bool *ret_ev_wakeup_enabled, bool *ret_control_pilot_disconnected, bool *ret_boost_mode_enabled);
+int tf_evse_v2_get_all_data_2(TF_EVSEV2 *evse_v2, uint8_t *ret_shutdown_input_configuration, uint8_t *ret_input_configuration, uint8_t *ret_output_configuration, int16_t *ret_indication, uint16_t *ret_duration, uint8_t *ret_button_configuration, uint32_t *ret_button_press_time, uint32_t *ret_button_release_time, bool *ret_button_pressed, bool *ret_ev_wakeup_enabled, bool *ret_control_pilot_disconnect, bool *ret_boost_mode_enabled);
 
 /**
  * \ingroup TF_EVSEV2
@@ -1002,6 +1092,13 @@ int tf_evse_v2_set_boost_mode(TF_EVSEV2 *evse_v2, bool boost_mode_enabled);
  * TODO
  */
 int tf_evse_v2_get_boost_mode(TF_EVSEV2 *evse_v2, bool *ret_boost_mode_enabled);
+
+/**
+ * \ingroup TF_EVSEV2
+ *
+ * TODO
+ */
+int tf_evse_v2_trigger_dc_fault_test(TF_EVSEV2 *evse_v2, uint32_t password, bool *ret_started);
 
 /**
  * \ingroup TF_EVSEV2

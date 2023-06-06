@@ -1,13 +1,13 @@
 {
     "charge_manager": {
         "status": {
-            "charge_manager": "Wallboxes"
+            "charge_manager": "Charge management"
         },
         "navbar": {
-            "charge_manager": "Wallboxes"
+            "charge_manager": "Chargers"
         },
         "content": {
-            "charge_manager": "Wallboxes"
+            "charge_manager": "Chargers"
         }
     },
     "event_log": {
@@ -50,6 +50,11 @@
     "charge_tracker": {
         "content": {
             "charge_tracker_remove_modal_text": "All tracked charges and the username history will be removed. <b>This action cannot be undone!</b> The energy manager then will restart."
+        }
+    },
+    "meter": {
+        "status": {
+            "charge_history": "Consumption history"
         }
     }
 }
